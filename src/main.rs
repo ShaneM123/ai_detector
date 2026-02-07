@@ -16,13 +16,13 @@ use std::path::Path;
 
 use ai_detector::EmailDataset;
 
-mod lib;
-
 fn main() {
     //create a trait and implment the following
-    let enron_emails = EmailDataset::new();
+    let mut enron_emails = EmailDataset::new();
 
-    enron_emails.generate_features(Path::new("/enron_data/train0.parquet"))?;
+    enron_emails
+        .generate_features(Path::new("enron_data/train0.parquet"))
+        .unwrap();
 
     println!("Hello, world!");
 }

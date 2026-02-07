@@ -5,5 +5,7 @@ edition = "2024"
 
 [dependencies]
 
-polars = { version = "0.52", features = ["parquet", "lazy"] }
+polars = { version = "0.52", features = ["parquet", "lazy", "timezones"] }
 anyhow = "1.0"
+mail-parser = "0.11"
+flate2 = { version = "1.1", features = ["any_zlib"] }
