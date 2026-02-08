@@ -12,6 +12,8 @@
 
 // features [compression_ratio, sentence_length_variance (or coefficient of variation = std_dev / mean), vocabulary_richness, average_sentence_length]
 
+// do the same for ai
+
 use std::path::Path;
 
 use ai_detector::EmailDataset;
@@ -24,5 +26,5 @@ fn main() {
         .generate_features(Path::new("enron_data/train0.parquet"))
         .unwrap();
 
-    println!("Hello, world!");
+    println!("dataset: {:?}", enron_emails.features_map);
 }

@@ -11,17 +11,19 @@ use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use flate2::{Compression, write::GzEncoder};
 use mail_parser::MessageParser;
 
+#[derive(Debug)]
 pub struct EmailDataset {
-    features_map: HashMap<CompressedEmailVec, Features>,
+    pub features_map: HashMap<CompressedEmailVec, Features>,
     email_bodies: Vec<String>,
 }
 type CompressedEmailVec = Vec<u8>;
 
-struct Features {
-    compression_ratio: CompressionRatio,
-    average_sentence_length: AverageSentenceLength,
-    vocab_richness: VocabRichness,
-    sentence_length_variance: SentenceLenghtVariance,
+#[derive(Debug)]
+pub struct Features {
+    pub compression_ratio: CompressionRatio,
+    pub average_sentence_length: AverageSentenceLength,
+    pub vocab_richness: VocabRichness,
+    pub sentence_length_variance: SentenceLenghtVariance,
 }
 
 type CompressionRatio = f64;
@@ -48,7 +50,7 @@ impl EmailDataset {
             PlPath::Local(Arc::from(email_dataset_path)),
             ScanArgsParquet::default(),
         )?;
-        let dataframe = lazy_frame.select([col("body")]).limit(100).collect()?;
+        let dataframe = lazy_frame.select([col("body")]).limit(10).collect()?;
 
         self.email_bodies = dataframe
             .column("body")?
@@ -57,7 +59,7 @@ impl EmailDataset {
             .map(|val| val.unwrap_or_default().to_owned())
             .collect();
 
-        println!("emails:{:?} ", self.email_bodies);
+        //println!("emails:{:?} ", self.email_bodies);
 
         //self.tidy_email_bodies()?;
 
@@ -80,6 +82,7 @@ impl EmailDataset {
 
     fn calculate_features(&mut self) -> AnyhowResult<()> {
         for email in &self.email_bodies {
+            // -- calculate compression ratio --
             let orginal_size = email.len() as f64;
             let mut encoder: GzEncoder<Vec<u8>> =
                 GzEncoder::new(Vec::new(), Compression::default());
@@ -87,6 +90,8 @@ impl EmailDataset {
             let compressed_email = encoder.finish()?;
             let compression_size = compressed_email.len() as f64;
             let compression_ratio: CompressionRatio = 1.00 - compression_size / orginal_size;
+
+            // -- calculate average sentence length --
 
             let sentence_accum = email
                 .split_terminator(|c: char| c == '.' || c == '!' || c == '?')
@@ -97,6 +102,8 @@ impl EmailDataset {
 
             let avg = sentence_accum.1 / sentence_accum.0;
 
+            // -- calculate vocab richness --
+
             let words = email.split_ascii_whitespace();
 
             let word_count = words.clone().count() as f64;
@@ -105,12 +112,26 @@ impl EmailDataset {
 
             let vocab_richness = unique_word_count / word_count;
 
-            //         let sentence_accum = email
-            // .split_terminator(|c: char| c == '.' || c == '!' || c == '?')
-            // .filter(|s| !s.trim().is_empty())
-            // .fold((0.0, 0.0), |(count, total), val| {
-            //     (count + 1.0, total + (val.len() as f64))
-            // });
+            // -- sentence length variance --
+
+            let sentences = email
+                .split_terminator(|c: char| c == '.' || c == '!' || c == '?')
+                .filter(|s| !s.trim().is_empty())
+                .collect::<Vec<&str>>();
+
+            let sentence_word_counts: Vec<f64> = sentences
+                .iter()
+                .map(|x| x.chars().count() as f64)
+                .collect::<Vec<f64>>();
+
+            let sentence_count = sentences.len() as f64;
+            let mean = word_count / sentence_count;
+
+            let squared_sum = sentence_word_counts
+                .iter()
+                .fold(0.0, |accum, val| accum + (val - mean).powf(2.0));
+
+            let sentence_variance = squared_sum / sentence_count - 1.0;
 
             self.features_map.insert(
                 compressed_email,
@@ -118,23 +139,10 @@ impl EmailDataset {
                     compression_ratio,
                     average_sentence_length: avg,
                     vocab_richness: vocab_richness,
-                    sentence_length_variance: 0.00,
+                    sentence_length_variance: sentence_variance,
                 },
             );
-            // self.generate_compression_ratios(email)?;
-            // self.average_sentence_length(email);
-            // self.vocabulary_richness();
-            // self.sentence_length_variance();
         }
         Ok(())
     }
-
-    fn generate_compression_ratios(&mut self, email: &String) -> AnyhowResult<()> {
-        Ok(())
-    }
-    fn average_sentence_length(&self, email: &String) -> AnyhowResult<()> {
-        Ok(())
-    }
-    fn vocabulary_richness(&self) {}
-    fn sentence_length_variance(&self) {}
 }
