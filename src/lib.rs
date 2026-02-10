@@ -1,7 +1,6 @@
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    intrinsics::sqrtf64,
     io::Write,
     path::Path,
     sync::Arc,
@@ -76,23 +75,31 @@ impl Emails {
     }
 
     pub fn analyse(&self) -> AnyhowResult<()> {
-        // get the input emails features
-
         //calculate distances
         for input_email in self.input_email.features_map.iter() {
-            let mut ai_distances = Vec::new();
-            let mut real_distances = Vec::new();
+            let mut distances = Vec::new();
+
+            //TODO: fix iteration, was wrong in the first place, maye have to move the uncompressed value to the hash
             for ai_email in self.ai_emails.features_map.iter() {
-                ai_distances.push(Self::elucidian_distance(*input_email.1, *ai_email.1));
+                distances.push((true, Self::elucidian_distance(*input_email.1, *ai_email.1)));
             }
             for real_email in self.real_emails.features_map.iter() {
-                real_distances.push(Self::elucidian_distance(*input_email.1, *real_email.1));
+                distances.push((
+                    false,
+                    Self::elucidian_distance(*input_email.1, *real_email.1),
+                ));
             }
-            ai_distances.sort_by(|a, b| cmp_f64(a, b));
-            real_distances.sort_by(|a, b| cmp_f64(a, b));
-            // take a few and say it whichever its closer to
+
+            distances.sort_by(|a, b| cmp_f64(&a.1, &b.1));
+
+            //take 7 closest and find majority, true's = ai, false's = real
+            let total_true = distances.iter().take(7).filter(|x| x.0).count();
+            if total_true < 4 {
+                print!("Its a real email");
+            } else {
+                println!("It's written by ai");
+            }
         }
-        println!("we in analyse");
         Ok(())
     }
 
@@ -100,7 +107,40 @@ impl Emails {
         features_one
             .into_iter()
             .zip(features_two.into_iter())
-            .fold(0.0, |accum, features| {
+            .fold(0.0, |accum, features: (f64, f64)| {
+                accum + (features.0 - features.1).powf(2.0)
+            })
+            .sqrt()
+    }
+
+    // f1 = sys.argv[1]
+    // f2 = sys.argv[2]
+    // fd1=open(f1,"rb")
+    // x=fd1.read()
+    // fd1.close()
+    // fd2=open(f2,"rb")
+    // y=fd2.read()
+    // fd2.close()
+    // xy=x+y
+    // zxy = lzma.compress(xy)
+    // zx = lzma.compress(x)
+    // zy = lzma.compress(y)
+    // print "Length of compressed concatination: %d"%len(zxy)
+    // print "Length of compressed x: %d"%len(zx)
+    // print "Length of compressed y: %d"%len(zy)
+    // ncd = ((len(zxy)-min(len(zx), len(zy)))/(max(len(zx), len(zy))))
+    // print "{} {}".format(sys.argv[2],ncd)
+
+    fn ncd(features_one: Features, features_two: Features) -> f64 {
+        // add one and two to get onetwo
+        // compress, one, two and onetwo respectively
+        // calculate ncd as such:
+        // ncd = ((len(comp_onetwo)-min(comp_one.len(), comp_two.len()))/(max(comp_one, comp_two))))
+
+        features_one
+            .into_iter()
+            .zip(features_two.into_iter())
+            .fold(0.0, |accum, features: (f64, f64)| {
                 accum + (features.0 - features.1).powf(2.0)
             })
             .sqrt()
@@ -130,7 +170,7 @@ impl EmailDataset {
                 PlPath::Local(Arc::from(email_dataset_path)),
                 ScanArgsParquet::default(),
             )?;
-            let dataframe = lazy_frame.select([col("body")]).limit(10).collect()?;
+            let dataframe = lazy_frame.select([col("body")]).limit(50).collect()?;
 
             self.email_bodies = dataframe
                 .column("body")?
