@@ -1,7 +1,7 @@
 //TODO:
 // read about KNN
 // implement basic knn
-//grab some ai texts
+// grab some ai texts
 // grab some non ai texts
 // train the knn
 
@@ -16,15 +16,26 @@
 
 use std::path::Path;
 
-use ai_detector::EmailDataset;
+use ai_detector::{EmailDataset, Emails};
 
 fn main() {
     //create a trait and implment the following
-    let mut enron_emails = EmailDataset::new();
+    let mut real_enron_emails = EmailDataset::new();
+    let mut ai_enron_emails = EmailDataset::new();
 
-    enron_emails
+    real_enron_emails
         .generate_features(Path::new("enron_data/train0.parquet"))
         .unwrap();
 
-    println!("dataset: {:?}", enron_emails.features_map);
+    ai_enron_emails
+        .generate_features(Path::new("ai_emails.csv"))
+        .unwrap();
+
+    let emails = Emails::new(real_enron_emails, ai_enron_emails, input_email).unwrap();
+
+    emails.analyse().unwrap();
+    // let result = emails.analyse("input_email".to_string());
+
+    // println!("dataset: {:?}", real_enron_emails.features_map.values());
+    // println!("dataset: {:?}", ai_enron_emails.features_map.values());
 }
