@@ -1,4 +1,5 @@
 use ai_detector::{EmailDataset, Emails};
+use plotters::prelude::*;
 use std::path::Path;
 
 // TODO:
@@ -14,27 +15,37 @@ fn main() {
     let mut real_enron_emails = EmailDataset::new();
     let mut ai_enron_emails = EmailDataset::new();
 
-    let input_email =
-        "Subject: Out of Office: Jordan Lee – Wednesday, Feb 11
+    let input_email = "Subject: RE: RE: RE: Project Synergy - Q4 Deliverables
 
-Hi Sarah,
+Gary,
 
-Please note that I will be out of the office tomorrow, Wednesday, February 11, to attend to some scheduled personal administrative matters.
+Looked at the deck. The \"Web 2.0\" integration looks thin. We need more \"pop\" on the landing page—maybe some high-res gradients?
 
-To ensure a smooth workflow in my absence:
+I’m in the back of a town car right now, signal is spotty. Let’s circle back and touch base during the 8:00 AM status call tomorrow. Don’t forget to CC Brenda.
 
-    Daily Tasks: I’ve moved my recurring morning reports to Thursday morning.
+Best,
 
-    Support: For any immediate technical needs, please direct the team to Chris Miller, who has the login credentials for the shared dashboard.
+Rick
 
-    Communications: My Slack status is updated, and my OOO reply will direct people to the appropriate departments.
+Sent from my BlackBerry® wireless device".to_string();
 
-I will be back online and caught up by 9:00 AM on Thursday. Thanks for your support!
+    let root_area = BitMapBackend::new("chart.png", (1680, 1050)).into_drawing_area();
+    root_area.fill(&WHITE).unwrap();
 
-Best regards,
+    let mut ctx = ChartBuilder::on(&root_area)
+        .set_label_area_size(LabelAreaPosition::Left, 100)
+        .set_label_area_size(LabelAreaPosition::Bottom, 100)
+        .caption("Real ▲ vs AI o", ("sans-serif", 60))
+        .build_cartesian_2d(0.0..1.0, 0.0..1.2)
+        .unwrap();
 
-Jordan Lee Technical Specialist"
-            .to_string();
+    let original_style = ShapeStyle {
+        color: GREEN.mix(0.6),
+        filled: true,
+        stroke_width: 3,
+    };
+
+    ctx.configure_mesh().draw().unwrap();
 
     real_enron_emails
         .generate_features(Path::new("enron_data/train0.parquet"))
@@ -45,8 +56,34 @@ Jordan Lee Technical Specialist"
         .unwrap();
 
     let emails = Emails::new(real_enron_emails, ai_enron_emails, input_email).unwrap();
-
     emails.analyse().unwrap();
+
+    ctx.draw_series(emails.real_emails.features_map.iter().map(|point| {
+        TriangleMarker::new(
+            (point.1.1.vocab_richness, point.1.1.compression_ratio),
+            12,
+            &BLUE,
+        )
+    }))
+    .unwrap();
+
+    ctx.draw_series(emails.ai_emails.features_map.iter().map(|point| {
+        Circle::new(
+            (point.1.1.vocab_richness, point.1.1.compression_ratio),
+            12,
+            &RED,
+        )
+    }))
+    .unwrap();
+
+    ctx.draw_series(emails.input_email.features_map.iter().map(|point| {
+        Circle::new(
+            (point.1.1.vocab_richness, point.1.1.compression_ratio),
+            15,
+            ShapeStyle::filled(&original_style),
+        )
+    }))
+    .unwrap();
 
     //TODO: add input email to dataset
 }
