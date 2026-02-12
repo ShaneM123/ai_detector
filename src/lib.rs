@@ -9,7 +9,7 @@ use polars::prelude::{LazyFrame, PlPath, ScanArgsParquet, col};
 
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use csv::ReaderBuilder;
-use flate2::{Compress, Compression};
+use flate2::{Compress, Compression, Status};
 use mail_parser::MessageParser;
 
 #[derive(Debug)]
@@ -32,7 +32,6 @@ impl IntoIterator for Features {
     type Item = f64;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
-    // Required method
     fn into_iter(self) -> Self::IntoIter {
         vec![
             self.average_sentence_length,
@@ -74,30 +73,20 @@ impl Emails {
         })
     }
 
-    //TODO: figure out why ncd is not working
     pub fn analyse(&self) -> AnyhowResult<()> {
         //calculate distances
         for input_email in self.input_email.features_map.iter() {
             let mut distances = Vec::new();
 
-            //TODO: fix iteration, was wrong in the first place, maye have to move the uncompressed value to the hash
-            //TODO: improve performance by removing clones
-            //TODO: figure out if its messing up with the other features a bit, as they are ratios
             for ai_email in self.ai_emails.features_map.iter() {
                 distances.push((
                     true,
                     [
-                        //Self::ncd(input_email.1.clone(), ai_email.1.clone())?,
+                        Self::ncd(input_email.1.clone(), ai_email.1.clone())?,
                         Self::elucidian_distance(
-                            vec![
-                                input_email.1.1.compression_ratio,
-                                input_email.1.1.vocab_richness,
-                            ],
-                            vec![ai_email.1.1.compression_ratio, ai_email.1.1.vocab_richness],
+                            vec![input_email.1.1.vocab_richness],
+                            vec![ai_email.1.1.vocab_richness],
                         ),
-                        //ai_email.1.1.average_sentence_length,
-                        // ai_email.1.1.sentence_length_variance,
-                        //ai_email.1.1.vocab_richness,
                     ],
                 ));
             }
@@ -105,30 +94,19 @@ impl Emails {
                 distances.push((
                     false,
                     [
-                        //Self::ncd(input_email.1.clone(), real_email.1.clone())?,
+                        Self::ncd(input_email.1.clone(), real_email.1.clone())?,
                         Self::elucidian_distance(
-                            vec![
-                                input_email.1.1.compression_ratio,
-                                input_email.1.1.vocab_richness,
-                            ],
-                            vec![
-                                real_email.1.1.compression_ratio,
-                                real_email.1.1.vocab_richness,
-                            ],
+                            vec![input_email.1.1.vocab_richness],
+                            vec![real_email.1.1.vocab_richness],
                         ),
-                        //real_email.1.1.average_sentence_length,
-                        // real_email.1.1.sentence_length_variance,
-                        //real_email.1.1.vocab_richness,
                     ],
                 ));
             }
 
             distances.sort_by(|a, b| cmp_f64(&a.1.iter().sum(), &b.1.iter().sum()));
-            println!("DISTANCES: {:?}", distances);
 
-            //take 7 closest and find majority, true's = ai, false's = real
-            let total_true = distances.iter().take(5).filter(|x| x.0).count();
-            if total_true < 4 {
+            let total_true = distances.iter().take(13).filter(|x| x.0).count();
+            if total_true < 7 {
                 println!("Its a real email");
             } else {
                 println!("It's written by ai");
@@ -137,41 +115,30 @@ impl Emails {
         Ok(())
     }
 
-    fn ncd(
+    pub fn ncd(
         features_one: (String, Features),
         features_two: (String, Features),
     ) -> AnyhowResult<f64> {
-        let mut compressor = Compress::new(Compression::default(), false);
+        let mut combined = features_two.0.as_bytes().to_vec();
+        combined.extend_from_slice(features_one.0.as_bytes());
 
-        compressor.compress(
-            features_two
-                .0
-                .as_bytes()
-                .into_iter()
-                .chain(features_one.0.as_bytes().into_iter())
-                .copied()
-                .into_iter()
-                .collect::<Vec<u8>>()
-                .as_slice(),
-            &mut vec![0; 1024],
-            flate2::FlushCompress::Finish,
-        )?;
-        let combined_length = compressor.total_out() as f64;
+        let (combined_length, _compressed_emails) = compress(&combined)?;
 
         // ncd = ((len(xy)-min(len(x),(y)))/(max(len(x), len(y)))))
         Ok((combined_length
             - f64::min(
                 features_one.1.compression_length,
-                features_one.1.compression_length,
+                features_two.1.compression_length,
             ))
             / (f64::max(
                 features_one.1.compression_length,
-                features_one.1.compression_length,
+                features_two.1.compression_length,
             )))
     }
 
     //not needed when using ncd instead
     fn elucidian_distance(features_one: Vec<f64>, features_two: Vec<f64>) -> f64 {
+        println!("VEC 1 {:?} \n VEC2 {:?}", features_one, features_two);
         features_one
             .into_iter()
             .zip(features_two.into_iter())
@@ -205,7 +172,7 @@ impl EmailDataset {
                 PlPath::Local(Arc::from(email_dataset_path)),
                 ScanArgsParquet::default(),
             )?;
-            let dataframe = lazy_frame.select([col("body")]).limit(50).collect()?;
+            let dataframe = lazy_frame.select([col("body")]).limit(270).collect()?;
 
             self.email_bodies = dataframe
                 .column("body")?
@@ -257,21 +224,12 @@ impl EmailDataset {
     }
 }
 
-//TODO: skip short emails, harder to analyse
 pub fn calculate_features(email: &String) -> AnyhowResult<(Vec<u8>, Features)> {
     // -- calculate compression ratio --
-    let mut compressor = Compress::new(Compression::best(), false);
 
-    let mut compressor_output = [0; 1024];
-
-    compressor.compress(
-        email.as_bytes(),
-        &mut compressor_output,
-        flate2::FlushCompress::Finish,
-    )?;
-    let compression_length = compressor.total_out() as f64;
-    let compression_ratio = compression_length / email.as_bytes().len() as f64;
-    let compressed_email = compressor_output.to_vec();
+    let input = email.as_bytes().to_vec();
+    let (compression_length, compressed_email) = compress(&input)?;
+    let compression_ratio: f64 = compression_length / input.len() as f64;
 
     // -- calculate average sentence length --
 
@@ -291,10 +249,7 @@ pub fn calculate_features(email: &String) -> AnyhowResult<(Vec<u8>, Features)> {
     let word_count = words.clone().count() as f64;
 
     let unique_word_count = words.into_iter().collect::<HashSet<&str>>().len() as f64;
-    println!("word count: {}", word_count);
-    println!("unique word count: {}", unique_word_count);
     let vocab_richness = unique_word_count / word_count;
-    println!("vocab richness: {}", vocab_richness);
 
     // -- sentence length variance --
 
@@ -305,7 +260,7 @@ pub fn calculate_features(email: &String) -> AnyhowResult<(Vec<u8>, Features)> {
 
     let sentence_word_counts: Vec<f64> = sentences
         .iter()
-        .map(|x| x.chars().count() as f64)
+        .map(|x| x.split_ascii_whitespace().count() as f64)
         .collect::<Vec<f64>>();
 
     let sentence_count = sentences.len() as f64;
@@ -315,7 +270,7 @@ pub fn calculate_features(email: &String) -> AnyhowResult<(Vec<u8>, Features)> {
         .iter()
         .fold(0.0, |accum, val| accum + (val - mean).powf(2.0));
 
-    let sentence_variance = squared_sum / sentence_count - 1.0;
+    let sentence_variance = squared_sum / (sentence_count - 1.0);
 
     Ok((
         compressed_email,
@@ -342,4 +297,45 @@ fn cmp_f64(a: &f64, b: &f64) -> Ordering {
         return Ordering::Greater;
     }
     return Ordering::Equal;
+}
+
+fn compress(email_bytes: &Vec<u8>) -> AnyhowResult<(f64, Vec<u8>)> {
+    let mut compressor = Compress::new(Compression::best(), false);
+
+    let mut output = vec![0u8; email_bytes.len() + 1024];
+    let mut input_offset = 0;
+    let mut output_offset = 0;
+
+    loop {
+        let input_slice = &email_bytes[input_offset..];
+        let mut output_slice = &mut output[output_offset..];
+
+        let prev_total_in = compressor.total_in();
+        let prev_total_out = compressor.total_out();
+
+        let status = compressor.compress(
+            &input_slice,
+            &mut output_slice,
+            flate2::FlushCompress::Finish,
+        )?;
+
+        input_offset += (compressor.total_in() - prev_total_in) as usize;
+        output_offset += (compressor.total_out() - prev_total_out) as usize;
+
+        match status {
+            Status::StreamEnd => {
+                println!("feature stream end");
+                break;
+            }
+            Status::Ok => {
+                if input_offset >= email_bytes.len() {
+                    println!("features status ok. input offest greater than length");
+                    break;
+                }
+                return Err(anyhow::anyhow!("feature Ok Status,perhaps buffer is full?"));
+            }
+            Status::BufError => output.resize(output.len() * 2 + 1024, 0),
+        }
+    }
+    Ok((output_offset as f64, output))
 }
