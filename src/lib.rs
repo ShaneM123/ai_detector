@@ -12,6 +12,14 @@ use csv::ReaderBuilder;
 use flate2::{Compress, Compression, Status};
 use mail_parser::MessageParser;
 
+pub struct EmailDropGuard {}
+
+impl EmailDropGuard {
+    pub fn new() -> EmailDropGuard {
+        EmailDropGuard {}
+    }
+}
+
 #[derive(Debug)]
 pub struct EmailDataset {
     pub features_map: HashMap<CompressedEmailVec, (String, Features)>,
@@ -51,31 +59,42 @@ type CompressionRatio = f64;
 pub struct Emails {
     pub real_emails: EmailDataset,
     pub ai_emails: EmailDataset,
-    pub input_email: EmailDataset,
+    pub input_email: Option<EmailDataset>,
 }
 impl Emails {
     pub fn new(
         real_emails: EmailDataset,
         ai_emails: EmailDataset,
-        input_email: String,
+        input_email: Option<EmailDataset>,
     ) -> AnyhowResult<Emails> {
+        Ok(Emails {
+            real_emails,
+            ai_emails,
+            input_email: input_email,
+        })
+    }
+
+    pub fn set_input(&mut self, input_email: String) -> AnyhowResult<()> {
         let mut input_dataset = EmailDataset::new();
         let input_features = calculate_features(&input_email)?;
         input_dataset
             .features_map
             .insert(input_features.0, (input_email.clone(), input_features.1));
         input_dataset.email_bodies.push(input_email);
+        self.input_email = Some(input_dataset);
 
-        Ok(Emails {
-            real_emails,
-            ai_emails,
-            input_email: input_dataset,
-        })
+        Ok(())
     }
 
     pub fn analyse(&self) -> AnyhowResult<()> {
         //calculate distances
-        for input_email in self.input_email.features_map.iter() {
+        for input_email in self
+            .input_email
+            .as_ref()
+            .expect("no input email")
+            .features_map
+            .iter()
+        {
             let mut distances = Vec::new();
 
             for ai_email in self.ai_emails.features_map.iter() {

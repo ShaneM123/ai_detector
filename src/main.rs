@@ -1,6 +1,8 @@
 use ai_detector::{EmailDataset, Emails};
 use plotters::prelude::*;
+mod server;
 use std::path::Path;
+use tokio::{io::AsyncReadExt, net::TcpListener};
 
 // TODO:
 // some kind of benchmark
@@ -8,12 +10,44 @@ use std::path::Path;
 // allow users to set datasets
 // allow users to set k value
 // allow user to set features
-//TODO: add input email to dataset
+// TODO: add input email to dataset
 
-fn main() {
-    //create a trait and implment the following
+//TODO: single thread load data sets and put them behind a mutex on startup
+// accept incoming connections and pass it to analyse, allow user to set k values
+// return result and png image of graph
+// delete graphs
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut real_enron_emails = EmailDataset::new();
     let mut ai_enron_emails = EmailDataset::new();
+
+    real_enron_emails
+        .generate_features(Path::new("enron_data/train0.parquet"))
+        .unwrap();
+
+    ai_enron_emails
+        .generate_features(Path::new("ai_emails.csv"))
+        .unwrap();
+
+    let emails = Emails::new(real_enron_emails, ai_enron_emails, None).unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:8080").await?;
+
+    loop {
+        let (mut socket, _) = listener.accept().await?;
+
+        // tokio::spawn(async move {
+        //     let input_email = match socket.read(&mut buf).await {
+        //         Ok(0) => return,
+        //         Ok(n) => n,
+        //         Err(e) => {
+        //             eprintln!("failed to read from socket; {:?}", e);
+        //             return;
+        //         }
+        //     };
+        // });
+    }
 
     let input_email = "Hi Shane,
 
@@ -22,8 +56,11 @@ Great to hear you enjoyed being with the team. Unfortunately I was not able to g
 In the meantime, would you send me your bank account details? So I can forward your receipts to our financial admin.
 
 Have a sunny day,
-Romy"
-        .to_string();
+Romy".to_string();
+
+    //TODO: add filters and regex checking, make sure email isnt a pile of shite
+    emails.set_input(input_email);
+    emails.analyse().unwrap();
 
     let root_area = BitMapBackend::new("chart.png", (3200, 2080)).into_drawing_area();
     root_area.fill(&WHITE).unwrap();
@@ -43,17 +80,6 @@ Romy"
 
     ctx.configure_mesh().draw().unwrap();
 
-    real_enron_emails
-        .generate_features(Path::new("enron_data/train0.parquet"))
-        .unwrap();
-
-    ai_enron_emails
-        .generate_features(Path::new("ai_emails.csv"))
-        .unwrap();
-
-    let emails = Emails::new(real_enron_emails, ai_enron_emails, input_email).unwrap();
-    emails.analyse().unwrap();
-
     ctx.draw_series(emails.real_emails.features_map.iter().map(|point| {
         TriangleMarker::new(
             (point.1.1.vocab_richness, point.1.1.compression_ratio),
@@ -72,12 +98,20 @@ Romy"
     }))
     .unwrap();
 
-    ctx.draw_series(emails.input_email.features_map.iter().map(|point| {
-        Circle::new(
-            (point.1.1.vocab_richness, point.1.1.compression_ratio),
-            15,
-            ShapeStyle::filled(&original_style),
-        )
-    }))
+    ctx.draw_series(
+        emails
+            .input_email
+            .as_ref()
+            .expect("no input email found")
+            .features_map
+            .iter()
+            .map(|point| {
+                Circle::new(
+                    (point.1.1.vocab_richness, point.1.1.compression_ratio),
+                    15,
+                    ShapeStyle::filled(&original_style),
+                )
+            }),
+    )
     .unwrap();
 }

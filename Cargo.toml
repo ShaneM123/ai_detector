@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 
+tokio = { version = "1.49.0", features = ["full"] }
+
 polars = { version = "0.52", features = ["parquet", "lazy", "timezones"] }
 anyhow = "1.0"
 mail-parser = "0.11"
