@@ -1,10 +1,13 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use ai_detector::{EmailDataset, EmailDropGuard};
+use anyhow::{Ok, Result as AnyhowResult};
 use tokio::{
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     sync::{Semaphore, broadcast, mpsc},
+    time,
 };
+use tracing::{debug, error, info, instrument};
 
 struct Listener {
     listener: TcpListener,
@@ -15,9 +18,50 @@ struct Listener {
 }
 
 impl Listener {
-    pub async fn run(&mut self) {}
+    pub async fn run(&mut self) -> AnyhowResult<()> {
+        println!("accepting inbound connections");
+        loop {
+            let permit = self
+                .limit_connections
+                .clone()
+                .acquire_owned()
+                .await
+                .unwrap();
+
+            let socket = self.accept().await?;
+            let mut handler = Handler {
+                
+            }
+        }
+    }
+
+    async fn accept(&mut self) -> AnyhowResult<TcpStream> {
+        let mut backoff = 1;
+
+        loop {
+            match self.listener.accept().await {
+                std::result::Result::Ok((socket, _)) => return Ok(socket),
+                Err(err) => {
+                    if backoff > 64 {
+                        return Err(err.into());
+                    }
+                }
+            }
+
+            time::sleep(Duration::from_secs(backoff)).await;
+
+            backoff *= 2;
+        }
+    }
 }
-struct Handler {}
+struct Handler {
+
+    email_dataset: EmailDataset,
+    //todo: create the rs files for this
+    connection: Connection,
+    shutdown: Shutdown,
+    _shutdown_complete: mpsc::Sender<()>,
+}
 
 const MAX_CONNECTIONS: usize = 250;
 

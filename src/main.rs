@@ -1,9 +1,11 @@
 use ai_detector::{EmailDataset, Emails};
 use plotters::prelude::*;
-mod server;
 use std::path::Path;
-use tokio::{io::AsyncReadExt, net::TcpListener};
+use tokio::{net::TcpListener, signal};
 
+mod connections;
+mod req;
+mod server;
 // TODO:
 // some kind of benchmark
 // implement LZJD later
@@ -19,6 +21,7 @@ use tokio::{io::AsyncReadExt, net::TcpListener};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::try_init();
     let mut real_enron_emails = EmailDataset::new();
     let mut ai_enron_emails = EmailDataset::new();
 
@@ -30,26 +33,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .generate_features(Path::new("ai_emails.csv"))
         .unwrap();
 
-    let emails = Emails::new(real_enron_emails, ai_enron_emails, None).unwrap();
+    let mut emails = Emails::new(real_enron_emails, ai_enron_emails, None).unwrap();
 
     let listener = TcpListener::bind("127.0.0.1:8080").await?;
 
-    loop {
-        let (mut socket, _) = listener.accept().await?;
+    server::run(listener, signal::ctrl_c()).await;
 
-        // tokio::spawn(async move {
-        //     let input_email = match socket.read(&mut buf).await {
-        //         Ok(0) => return,
-        //         Ok(n) => n,
-        //         Err(e) => {
-        //             eprintln!("failed to read from socket; {:?}", e);
-        //             return;
-        //         }
-        //     };
-        // });
-    }
-
-    let input_email = "Hi Shane,
+    let input_email: String = "Hi Shane,
 
 Great to hear you enjoyed being with the team. Unfortunately I was not able to get any feedback from the team so far but I`ll have my weekly update with the CTO, Martin Menscher later today. After that I´ll come back to you with further steps. Thank you for your patience.
 
@@ -114,4 +104,5 @@ Romy".to_string();
             }),
     )
     .unwrap();
+    Ok(())
 }
