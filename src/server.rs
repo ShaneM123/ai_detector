@@ -7,11 +7,13 @@ use tokio::{
     sync::{Semaphore, broadcast, mpsc},
     time,
 };
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info};
+
+use crate::{connections::Connection, req, shutdown::Shutdown};
 
 struct Listener {
     listener: TcpListener,
-    email_dataset: EmailDropGuard,
+    email_dataset_holder: EmailDropGuard,
     limit_connections: Arc<Semaphore>,
     notify_shutdown: broadcast::Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
@@ -19,7 +21,7 @@ struct Listener {
 
 impl Listener {
     pub async fn run(&mut self) -> AnyhowResult<()> {
-        println!("accepting inbound connections");
+        info!("accepting inbound connections");
         loop {
             let permit = self
                 .limit_connections
@@ -28,19 +30,29 @@ impl Listener {
                 .await
                 .unwrap();
 
-            let socket = self.accept().await?;
-            let mut handler = Handler {
-                
-            }
+            let (socket, addr) = self.accept().await?;
+            let mut handler: Handler = Handler {
+                email_dataset: self.email_dataset_holder.email_dataset(),
+                connection: Connection::new_connection(socket),
+                shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
+                _shutdown_complete: self.shutdown_complete_tx.clone(),
+            };
+
+            tokio::spawn(async move {
+                if let Err(err) = handler.run().await {
+                    error!(cause = ?err, "connection error");
+                }
+                drop(permit);
+            });
         }
     }
 
-    async fn accept(&mut self) -> AnyhowResult<TcpStream> {
+    async fn accept(&mut self) -> AnyhowResult<(TcpStream, std::net::SocketAddr)> {
         let mut backoff = 1;
 
         loop {
             match self.listener.accept().await {
-                std::result::Result::Ok((socket, _)) => return Ok(socket),
+                std::result::Result::Ok((socket, addr)) => return Ok((socket, addr)),
                 Err(err) => {
                     if backoff > 64 {
                         return Err(err.into());
@@ -55,12 +67,30 @@ impl Listener {
     }
 }
 struct Handler {
-
     email_dataset: EmailDataset,
     //todo: create the rs files for this
     connection: Connection,
     shutdown: Shutdown,
     _shutdown_complete: mpsc::Sender<()>,
+}
+
+impl Handler {
+    async fn run(&mut self) -> AnyhowResult<()> {
+        while !self.shutdown.is_shutdown() {
+            let maybe_request = tokio::select! {
+                res = self.connection.read_req() => res?,
+                _ = self.shutdown.recv() => {
+                    return Ok(());
+                }
+            };
+
+            let request = match maybe_request {
+                Some(request) => request,
+                None => return Ok(()),
+            };
+        }
+        Ok(())
+    }
 }
 
 const MAX_CONNECTIONS: usize = 250;
@@ -72,7 +102,7 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) {
     let mut server = Listener {
         listener,
         //todo: pass email dataset
-        email_dataset: EmailDropGuard::new(),
+        email_dataset_holder: EmailDropGuard::new(),
         limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         notify_shutdown,
         shutdown_complete_tx,

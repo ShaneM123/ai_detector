@@ -1,8 +1,6 @@
-use std::{arch::x86_64::_ktest_mask8_u8, collections::HashMap};
+use std::collections::HashMap;
 
 use anyhow::{Ok, Result as AnyhowResult};
-use collections::HashMap;
-use polars::prelude::buffer::validate_utf8;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -47,6 +45,7 @@ pub async fn parse_request(mut stream: impl AsyncBufRead + Unpin) -> AnyhowResul
 
     let mut headers = HashMap::new();
 
+    //TODO: move this over to the handler i guess
     loop {
         line_buffer.clear();
         stream.read_line(&mut line_buffer).await?;
@@ -56,7 +55,7 @@ pub async fn parse_request(mut stream: impl AsyncBufRead + Unpin) -> AnyhowResul
         }
         let mut comps = line_buffer.split(":");
 
-        key = comps.next().ok_or(anyhow::anyhow!("missing headers"))?;
+        let key = comps.next().ok_or(anyhow::anyhow!("missing headers"))?;
 
         let value = comps
             .next()
@@ -66,7 +65,7 @@ pub async fn parse_request(mut stream: impl AsyncBufRead + Unpin) -> AnyhowResul
         headers.insert(key.to_string(), value.to_string());
     }
 
-    ok(Request {
+    Ok(Request {
         method,
         path,
         headers,
