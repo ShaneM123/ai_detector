@@ -6,7 +6,9 @@ edition = "2024"
 [dependencies]
 
 tokio = { version = "1.49.0", features = ["full"] }
+tokio-rustls = { version = "0.26.4", features = ["aws-lc-rs"] }
 
+h2 = "0.4"
 polars = { version = "0.52", features = ["parquet", "lazy", "timezones"] }
 anyhow = "1.0"
 mail-parser = "0.11"

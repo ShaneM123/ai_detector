@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{Ok, Result as AnyhowResult};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};
+use tracing::info;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Request {
@@ -13,6 +14,7 @@ pub struct Request {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Method {
     Get,
+    Post,
 }
 
 impl TryFrom<&str> for Method {
@@ -20,7 +22,10 @@ impl TryFrom<&str> for Method {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "GET" => Ok(Method::Get),
+            "/GET" => Ok(Method::Get),
+            "POST" => Ok(Method::Post),
+            "get" => Ok(Method::Get),
+            "post" => Ok(Method::Post),
             m => Err(anyhow::anyhow!("unsupported methods: {m}")),
         }
     }
@@ -31,8 +36,11 @@ pub async fn parse_request(mut stream: impl AsyncBufRead + Unpin) -> AnyhowResul
 
     stream.read_line(&mut line_buffer).await?;
 
+    info!("parsing request");
+
     let mut parts = line_buffer.split_whitespace();
 
+    //TODO: this part of the code breaks at some point
     let method: Method = parts
         .next()
         .ok_or(anyhow::anyhow!("missing method"))
@@ -45,8 +53,8 @@ pub async fn parse_request(mut stream: impl AsyncBufRead + Unpin) -> AnyhowResul
 
     let mut headers = HashMap::new();
 
-    //TODO: move this over to the handler i guess
     loop {
+        //TODO: probably breaks here
         line_buffer.clear();
         stream.read_line(&mut line_buffer).await?;
 
@@ -64,6 +72,7 @@ pub async fn parse_request(mut stream: impl AsyncBufRead + Unpin) -> AnyhowResul
 
         headers.insert(key.to_string(), value.to_string());
     }
+    info!("request parsed");
 
     Ok(Request {
         method,

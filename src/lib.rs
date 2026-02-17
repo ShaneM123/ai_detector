@@ -12,7 +12,7 @@ use csv::ReaderBuilder;
 use flate2::{Compress, Compression, Status};
 use mail_parser::MessageParser;
 
-pub(crate) struct EmailDropGuard {
+pub struct EmailDropGuard {
     email_dataset: EmailDataset,
 }
 
@@ -23,7 +23,7 @@ impl EmailDropGuard {
         }
     }
 
-    pub(crate) fn email_dataset(&self) -> EmailDataset {
+    pub fn email_dataset(&self) -> EmailDataset {
         self.email_dataset.clone()
     }
 }
