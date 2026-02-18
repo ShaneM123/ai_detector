@@ -4,6 +4,7 @@ use ai_detector::{EmailDataset, EmailDropGuard};
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use bytes::Bytes;
 use h2::server::{self, Builder};
+use http::{Response, StatusCode};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{Semaphore, broadcast, mpsc},
@@ -123,34 +124,25 @@ impl Handler {
     async fn run(&mut self) -> AnyhowResult<()> {
         info!("run handler");
         while !self.shutdown.is_shutdown() {
-            //TODO: tidy up handling of http2 requests
-            let (req, res) = self
-                .connection
-                .accept()
-                .await
-                .ok_or(anyhow!("error accepting http2 connection"))??;
+            let maybe_request = tokio::select! {
 
-            let maybe_request: Option<req::Request> = tokio::select! {
-
-                res = stream() => res?,
+                res =  self.connection.accept() => res,
                 _ = self.shutdown.recv() => {
                     return Ok(());
                 }
             };
 
-            let request = match maybe_request {
-                Some(request) => request,
+            let (request, mut respond) = match maybe_request {
+                Some(request) => request?,
                 None => return Ok(()),
             };
 
-            // Get K value in Path
-            // get input data stream?
-            let k_val = request
-                .path
-                .split_terminator('?')
-                .last()
-                .ok_or(anyhow!("couldnt split path at ?"))?;
-            info!("kval is {}", k_val);
+            let html_response = req::process_request(request).await?;
+            let response = Response::builder().status(StatusCode::OK).body(())?;
+
+            let mut resp_res = respond.send_response(response, false)?;
+            //response.body(html_response);
+            let _ = resp_res.send_data(Bytes::from(html_response), true)?;
         }
         Ok(())
     }
@@ -164,8 +156,9 @@ pub async fn run(addr: String, shutdown: impl Future) -> AnyhowResult<()> {
 
     //todo: implement tokio_rustls here + h2
     let listener = TcpListener::bind(addr).await?;
-    let certs = CertificateDer::pem_file_iter("test_server.crt")?.collect::<Result<Vec<_>, _>>()?;
-    let key = PrivateKeyDer::from_pem_file("test_server.key")?;
+    let certs =
+        CertificateDer::pem_file_iter("test_server2.crt")?.collect::<Result<Vec<_>, _>>()?;
+    let key = PrivateKeyDer::from_pem_file("test_server2.key")?;
 
     let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),

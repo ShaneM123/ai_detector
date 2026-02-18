@@ -1,9 +1,6 @@
-use anyhow::{Ok, Result as AnyhowResult};
 use bytes::BytesMut;
 use tokio::{io::BufReader, net::TcpStream};
 use tokio_rustls::server::TlsStream;
-
-use crate::req::{Request, parse_request};
 
 #[derive(Debug)]
 pub struct Connection {
@@ -22,9 +19,5 @@ impl Connection {
             stream: BufReader::new(socket),
             buffer: BytesMut::with_capacity(400 * 1024),
         }
-    }
-
-    pub async fn read_req(&mut self) -> AnyhowResult<Option<Request>> {
-        Ok(Some(parse_request(&mut self.stream).await?))
     }
 }

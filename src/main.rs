@@ -5,6 +5,7 @@ use tokio::signal;
 use tracing::info;
 
 mod connections;
+mod homepage;
 mod req;
 mod server;
 mod shutdown;

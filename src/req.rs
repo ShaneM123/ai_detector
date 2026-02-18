@@ -1,82 +1,24 @@
-use std::collections::HashMap;
-
-use anyhow::{Ok, Result as AnyhowResult};
-use tokio::io::{AsyncBufRead, AsyncBufReadExt};
+use crate::homepage::homepage;
+use anyhow::{Ok, Result as AnyhowResult, anyhow};
+use h2::RecvStream;
+use http::{Method, Request, Response};
 use tracing::info;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Request {
-    pub method: Method,
-    pub path: String,
-    pub headers: HashMap<String, String>,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum Method {
-    Get,
-    Post,
-}
-
-impl TryFrom<&str> for Method {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "/GET" => Ok(Method::Get),
-            "POST" => Ok(Method::Post),
-            "get" => Ok(Method::Get),
-            "post" => Ok(Method::Post),
-            m => Err(anyhow::anyhow!("unsupported methods: {m}")),
+pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<String> {
+    if Method::GET == *request.method() {
+        if request.uri().path() == "/" {
+            //TODO: might need to tell it not to end the stream here
+            let hompage_html = homepage()?;
+            return Ok(hompage_html);
         }
-    }
-}
-
-pub async fn parse_request(mut stream: impl AsyncBufRead + Unpin) -> AnyhowResult<Request> {
-    let mut line_buffer = String::new();
-
-    stream.read_line(&mut line_buffer).await?;
-
-    info!("parsing request");
-
-    let mut parts = line_buffer.split_whitespace();
-
-    //TODO: this part of the code breaks at some point
-    let method: Method = parts
-        .next()
-        .ok_or(anyhow::anyhow!("missing method"))
-        .and_then(TryInto::try_into)?;
-
-    let path: String = parts
-        .next()
-        .ok_or(anyhow::anyhow!("missing path"))
-        .map(Into::into)?;
-
-    let mut headers = HashMap::new();
-
-    loop {
-        //TODO: probably breaks here
-        line_buffer.clear();
-        stream.read_line(&mut line_buffer).await?;
-
-        if line_buffer.is_empty() || line_buffer == "\n" || line_buffer == "\r\n" {
-            break;
+    } else if Method::POST == *request.method() {
+        let mut email_gathered = Vec::new();
+        while let Some(email) = request.body_mut().data().await {
+            email_gathered.push(email?);
         }
-        let mut comps = line_buffer.split(":");
-
-        let key = comps.next().ok_or(anyhow::anyhow!("missing headers"))?;
-
-        let value = comps
-            .next()
-            .ok_or(anyhow::anyhow!("missing header value"))?
-            .trim();
-
-        headers.insert(key.to_string(), value.to_string());
+    } else {
+        return Ok("422 unprocessable".to_string());
     }
-    info!("request parsed");
 
-    Ok(Request {
-        method,
-        path,
-        headers,
-    })
+    return Err(anyhow!("something went really wrong matching the method"));
 }
