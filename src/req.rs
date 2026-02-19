@@ -1,4 +1,4 @@
-use crate::homepage::homepage;
+use crate::{homepage::homepage, req};
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use h2::RecvStream;
 use http::{Method, Request, Response};
@@ -13,9 +13,17 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<S
         }
     } else if Method::POST == *request.method() {
         let mut email_gathered = Vec::new();
-        while let Some(email) = request.body_mut().data().await {
-            email_gathered.push(email?);
+        while let Some(chunk) = request.body_mut().data().await {
+            let chunk = chunk?;
+
+            email_gathered.extend_from_slice(&chunk);
+            let _ = request
+                .body_mut()
+                .flow_control()
+                .release_capacity(chunk.len())?;
         }
+        let unsanatized_request = String::from_utf8(email_gathered)?;
+        info!("POST REQUEST: {}", unsanatized_request);
     } else {
         return Ok("422 unprocessable".to_string());
     }
