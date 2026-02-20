@@ -11,20 +11,19 @@ use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use csv::ReaderBuilder;
 use flate2::{Compress, Compression, Status};
 use mail_parser::MessageParser;
+use tracing::info;
 
 pub struct EmailDropGuard {
-    email_dataset: EmailDataset,
+    emails: Emails,
 }
 
 impl EmailDropGuard {
-    pub fn new() -> EmailDropGuard {
-        EmailDropGuard {
-            email_dataset: EmailDataset::new(),
-        }
+    pub fn new(emails: Emails) -> EmailDropGuard {
+        EmailDropGuard { emails }
     }
 
-    pub fn email_dataset(&self) -> EmailDataset {
-        self.email_dataset.clone()
+    pub fn emails(&self) -> Emails {
+        self.emails.clone()
     }
 }
 
@@ -64,6 +63,8 @@ type AverageSentenceLength = f64;
 type VocabRichness = f64;
 type SentenceLenghtVariance = f64;
 type CompressionRatio = f64;
+
+#[derive(Clone)]
 pub struct Emails {
     pub real_emails: EmailDataset,
     pub ai_emails: EmailDataset,
@@ -94,7 +95,7 @@ impl Emails {
         Ok(())
     }
 
-    pub fn analyse(&self) -> AnyhowResult<()> {
+    pub async fn analyse(&self) -> AnyhowResult<bool> {
         //calculate distances
         for input_email in self
             .input_email
@@ -134,12 +135,14 @@ impl Emails {
 
             let total_true = distances.iter().take(13).filter(|x| x.0).count();
             if total_true < 7 {
-                println!("Its a real email");
+                info!("Its a real email");
+                return Ok(true);
             } else {
-                println!("It's written by ai");
+                info!("It's written by ai");
+                return Ok(false);
             }
         }
-        Ok(())
+        Err(anyhow!("couldnt analyse email"))
     }
 
     pub fn ncd(

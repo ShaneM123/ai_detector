@@ -5,8 +5,8 @@ use tokio::signal;
 use tracing::info;
 
 mod connections;
+mod handler;
 mod homepage;
-mod req;
 mod server;
 mod shutdown;
 // TODO:
@@ -25,18 +25,6 @@ mod shutdown;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trace = tracing_subscriber::fmt::try_init();
-    // let mut real_enron_emails = EmailDataset::new();
-    // let mut ai_enron_emails = EmailDataset::new();
-
-    // real_enron_emails
-    //     .generate_features(Path::new("enron_data/train0.parquet"))
-    //     .unwrap();
-
-    // ai_enron_emails
-    //     .generate_features(Path::new("ai_emails.csv"))
-    //     .unwrap();
-
-    // let mut emails = Emails::new(real_enron_emails, ai_enron_emails, None).unwrap();
 
     info!("starting server");
     server::run("127.0.0.1:8080".to_string(), signal::ctrl_c()).await?;

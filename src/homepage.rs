@@ -4,7 +4,7 @@ use hypertext::prelude::*;
 pub fn homepage() -> AnyhowResult<String> {
     let response_html = rsx! {
         <div>
-            <form action="" method="get" class="form-example">
+            <form action="/submit" method="post" class="form-example">
       <div class="form-example">
         <label for="name">"Enter email to check for ai:" </label>
         <input type="text" name="name" id="name" required />

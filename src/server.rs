@@ -1,10 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::{path::Path, sync::Arc, time::Duration};
 
-use ai_detector::{EmailDataset, EmailDropGuard};
-use anyhow::{Ok, Result as AnyhowResult, anyhow};
-use bytes::Bytes;
-use h2::server::{self, Builder};
-use http::{Response, StatusCode};
+use ai_detector::{EmailDataset, EmailDropGuard, Emails};
+use anyhow::{Ok, Result as AnyhowResult};
+use h2::server::Builder;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{Semaphore, broadcast, mpsc},
@@ -21,7 +19,7 @@ use tokio_rustls::{
 
 use tracing::{error, info};
 
-use crate::{req, shutdown::Shutdown};
+use crate::{handler::Handler, shutdown::Shutdown};
 
 //TODO: create h2 Connection
 // call accept on Connection
@@ -64,16 +62,14 @@ impl Listener {
                 .initial_connection_window_size(1_000_000)
                 .handshake(socket)
                 .await?;
-            //let x = stream.accept().await;
 
-            //let (request, response) = stream.accept().await.unwrap()?;
+            let mut handler = Handler::new(
+                self.email_dataset_holder.emails(),
+                stream,
+                Shutdown::new(self.notify_shutdown.subscribe()),
+                self.shutdown_complete_tx.clone(),
+            );
 
-            let mut handler: Handler = Handler {
-                email_dataset: self.email_dataset_holder.email_dataset(),
-                connection: stream,
-                shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
-                _shutdown_complete: self.shutdown_complete_tx.clone(),
-            };
             info!("spawning handler run");
 
             tokio::spawn(async move {
@@ -112,50 +108,27 @@ impl Listener {
         }
     }
 }
-struct Handler {
-    email_dataset: EmailDataset,
-    //todo: create the rs files for this
-    connection: server::Connection<TlsStream<TcpStream>, Bytes>,
-    shutdown: Shutdown,
-    _shutdown_complete: mpsc::Sender<()>,
-}
-
-impl Handler {
-    async fn run(&mut self) -> AnyhowResult<()> {
-        info!("run handler");
-        while !self.shutdown.is_shutdown() {
-            let maybe_request = tokio::select! {
-
-                res =  self.connection.accept() => res,
-                _ = self.shutdown.recv() => {
-                    return Ok(());
-                }
-            };
-
-            let (request, mut respond) = match maybe_request {
-                Some(request) => request?,
-                None => return Ok(()),
-            };
-
-            let html_response = req::process_request(request).await?;
-            let response = Response::builder().status(StatusCode::OK).body(())?;
-
-            let mut resp_res = respond.send_response(response, false)?;
-            //response.body(html_response);
-            let _ = resp_res.send_data(Bytes::from(html_response), true)?;
-        }
-        Ok(())
-    }
-}
 
 const MAX_CONNECTIONS: usize = 250;
 
 pub async fn run(addr: String, shutdown: impl Future) -> AnyhowResult<()> {
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, mut shutdown_complete_rx_) = mpsc::channel(1);
+    let mut real_enron_emails = EmailDataset::new();
+    let mut ai_enron_emails = EmailDataset::new();
+
+    real_enron_emails
+        .generate_features(Path::new("enron_data/train0.parquet"))
+        .unwrap();
+
+    ai_enron_emails
+        .generate_features(Path::new("ai_emails.csv"))
+        .unwrap();
+
+    let mut emails = Emails::new(real_enron_emails, ai_enron_emails, None).unwrap();
+    let mut email_dataset: EmailDropGuard = EmailDropGuard::new(emails);
 
     //todo: implement tokio_rustls here + h2
-    let listener = TcpListener::bind(addr).await?;
     let certs =
         CertificateDer::pem_file_iter("test_server2.crt")?.collect::<Result<Vec<_>, _>>()?;
     let key = PrivateKeyDer::from_pem_file("test_server2.key")?;
@@ -168,13 +141,15 @@ pub async fn run(addr: String, shutdown: impl Future) -> AnyhowResult<()> {
     .with_single_cert(certs, key)?;
     config.alpn_protocols = vec![b"h2".to_vec()];
 
+    let listener = TcpListener::bind(addr).await?;
+
     let acceptor = TlsAcceptor::from(Arc::new(config));
 
     let mut server: Listener = Listener {
         acceptor,
         listener,
         //todo: pass email dataset
-        email_dataset_holder: EmailDropGuard::new(),
+        email_dataset_holder: email_dataset,
         limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         notify_shutdown,
         shutdown_complete_tx,
