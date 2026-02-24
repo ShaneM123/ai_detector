@@ -20,3 +20,4 @@ plotters = "0.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 bytes = "1.11"
+urlencoding = "2.1.3"

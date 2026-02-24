@@ -11,19 +11,19 @@ use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use csv::ReaderBuilder;
 use flate2::{Compress, Compression, Status};
 use mail_parser::MessageParser;
+use tokio::sync::Mutex;
 use tracing::info;
 
+#[derive(Clone)]
 pub struct EmailDropGuard {
-    emails: Emails,
+    pub emails: Arc<tokio::sync::Mutex<Emails>>,
 }
 
 impl EmailDropGuard {
     pub fn new(emails: Emails) -> EmailDropGuard {
-        EmailDropGuard { emails }
-    }
-
-    pub fn emails(&self) -> Emails {
-        self.emails.clone()
+        EmailDropGuard {
+            emails: Arc::new(Mutex::new(emails)),
+        }
     }
 }
 
@@ -64,7 +64,7 @@ type VocabRichness = f64;
 type SentenceLenghtVariance = f64;
 type CompressionRatio = f64;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Emails {
     pub real_emails: EmailDataset,
     pub ai_emails: EmailDataset,
@@ -95,7 +95,7 @@ impl Emails {
         Ok(())
     }
 
-    pub async fn analyse(&self) -> AnyhowResult<bool> {
+    pub fn analyse(&self) -> AnyhowResult<bool> {
         //calculate distances
         for input_email in self
             .input_email
@@ -168,7 +168,6 @@ impl Emails {
 
     //not needed when using ncd instead
     fn elucidian_distance(features_one: Vec<f64>, features_two: Vec<f64>) -> f64 {
-        println!("VEC 1 {:?} \n VEC2 {:?}", features_one, features_two);
         features_one
             .into_iter()
             .zip(features_two.into_iter())
@@ -188,8 +187,11 @@ impl EmailDataset {
     }
 
     pub fn generate_features(&mut self, email_dataset_path: &Path) -> AnyhowResult<()> {
+        println!("get trimmed email bodies");
         self.get_trimmed_email_bodies(email_dataset_path)?;
+        println!("calculate features");
         self.calculate_dataset_features()?;
+        println!("features calculated");
         Ok(())
     }
 
@@ -354,7 +356,6 @@ fn compress(email_bytes: &Vec<u8>) -> AnyhowResult<(f64, Vec<u8>)> {
 
         match status {
             Status::StreamEnd => {
-                println!("feature stream end");
                 break;
             }
             Status::Ok => {

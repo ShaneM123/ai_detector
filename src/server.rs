@@ -19,7 +19,7 @@ use tokio_rustls::{
 
 use tracing::{error, info};
 
-use crate::{handler::Handler, shutdown::Shutdown};
+use crate::{Config, handler::Handler, shutdown::Shutdown};
 
 //TODO: create h2 Connection
 // call accept on Connection
@@ -64,7 +64,7 @@ impl Listener {
                 .await?;
 
             let mut handler = Handler::new(
-                self.email_dataset_holder.emails(),
+                self.email_dataset_holder.clone(),
                 stream,
                 Shutdown::new(self.notify_shutdown.subscribe()),
                 self.shutdown_complete_tx.clone(),
@@ -111,24 +111,10 @@ impl Listener {
 
 const MAX_CONNECTIONS: usize = 250;
 
-pub async fn run(addr: String, shutdown: impl Future) -> AnyhowResult<()> {
+pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<()> {
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, mut shutdown_complete_rx_) = mpsc::channel(1);
-    let mut real_enron_emails = EmailDataset::new();
-    let mut ai_enron_emails = EmailDataset::new();
 
-    real_enron_emails
-        .generate_features(Path::new("enron_data/train0.parquet"))
-        .unwrap();
-
-    ai_enron_emails
-        .generate_features(Path::new("ai_emails.csv"))
-        .unwrap();
-
-    let mut emails = Emails::new(real_enron_emails, ai_enron_emails, None).unwrap();
-    let mut email_dataset: EmailDropGuard = EmailDropGuard::new(emails);
-
-    //todo: implement tokio_rustls here + h2
     let certs =
         CertificateDer::pem_file_iter("test_server2.crt")?.collect::<Result<Vec<_>, _>>()?;
     let key = PrivateKeyDer::from_pem_file("test_server2.key")?;
@@ -141,15 +127,14 @@ pub async fn run(addr: String, shutdown: impl Future) -> AnyhowResult<()> {
     .with_single_cert(certs, key)?;
     config.alpn_protocols = vec![b"h2".to_vec()];
 
-    let listener = TcpListener::bind(addr).await?;
+    let listener = TcpListener::bind(server_config.server_address).await?;
 
     let acceptor = TlsAcceptor::from(Arc::new(config));
 
     let mut server: Listener = Listener {
         acceptor,
         listener,
-        //todo: pass email dataset
-        email_dataset_holder: email_dataset,
+        email_dataset_holder: EmailDropGuard::new(server_config.emails),
         limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         notify_shutdown,
         shutdown_complete_tx,
