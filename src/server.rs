@@ -72,6 +72,8 @@ impl Listener {
 
             info!("spawning handler run");
 
+            //TODO: accept incoming notify shutdown
+
             tokio::spawn(async move {
                 if let Err(err) = handler.run().await {
                     error!(cause = ?err, "connection error");
@@ -147,6 +149,7 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
             }
         }
         _ = shutdown => {
+            server.notify_shutdown
             info!("shutting down");
         }
     }

@@ -7,6 +7,7 @@ use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::{Ok, Result as AnyhowResult};
 use bytes::Bytes;
+use form_urlencoded;
 use h2::RecvStream;
 use h2::server::{self, Connection};
 use http::{Method, Request};
@@ -17,8 +18,6 @@ use tokio::io::AsyncReadExt;
 use tokio::{net::TcpStream, sync::mpsc};
 use tokio_rustls::server::TlsStream;
 use tracing::info;
-use urlencoding::decode;
-
 pub struct Handler {
     email_dataset: EmailDropGuard,
     //todo: create the rs files for this
@@ -78,18 +77,19 @@ impl Handler {
                     .await??;
 
                     if res {
-                        Bytes::from("It's a real email")
+                        Bytes::from("<p>It's a real email</p>")
                     } else {
-                        Bytes::from("It's an AI email")
+                        Bytes::from("<p>It's an AI email</p>")
                     }
                 }
                 ResponseBodyType::Html(html) => Bytes::from(html),
                 ResponseBodyType::Image(image) => Bytes::from(image),
             };
 
-            let response: Response<()> = Response::builder().status(StatusCode::OK).body(())?;
+            let response: Response<()> = Response::builder().status(html_response.status).body(())?;
 
             let mut resp_res = respond.send_response(response, false)?;
+
             //response.body(html_response);
             let _ = resp_res.send_data(response_body, html_response.end_of_stream)?;
         }
@@ -99,6 +99,7 @@ impl Handler {
 
 #[derive(Debug)]
 pub struct ResponseHandle {
+    status: StatusCode,
     pub body: Option<ResponseBodyType>,
     end_of_stream: bool,
 }
@@ -117,12 +118,14 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             let hompage_html = homepage()?;
 
             return Ok(ResponseHandle {
+                status: StatusCode::OK,
                 body: Some(ResponseBodyType::Html(hompage_html)),
                 end_of_stream: true,
             });
         } else if request.uri().path().contains("favicon.ico") {
             let favicon = tokio::fs::read("cuddlyferris.png").await?;
             return Ok(ResponseHandle {
+                status: StatusCode::OK,
                 body: Some(ResponseBodyType::Image(favicon)),
                 end_of_stream: true,
             });
@@ -130,6 +133,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             let req_path = request.uri().path();
             info!("path was: {}", req_path);
             return Ok(ResponseHandle {
+                status: StatusCode::OK,
                 body: Some(ResponseBodyType::Html("<Html></Html>".to_string())),
                 end_of_stream: true,
             });
@@ -147,6 +151,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     .release_capacity(chunk.len())?;
                 if email_gathered.len() > 4000 {
                     return Ok(ResponseHandle {
+                        status: StatusCode::OK,
                         body: Some(ResponseBodyType::Html(
                             "<Html><div><p>email too long, try a shorter one</p></div></Html>"
                                 .to_string(),
@@ -157,6 +162,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             }
             if email_gathered.len() < 6 {
                 return Ok(ResponseHandle {
+                    status: StatusCode::OK,
                     body: Some(ResponseBodyType::Html(
                         "<Html><div><p>email too short, try a longer one</p></div></Html>"
                             .to_string(),
@@ -165,18 +171,20 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                 });
             }
             info!("email_gathered {}", email_gathered.len());
-            let mut unsanatized_request = String::from_utf8(email_gathered)?;
-            info!("POST REQUEST: {}", unsanatized_request);
-            let encoded_email = unsanatized_request.split_off(5);
-            let email = decode(&encoded_email)?.to_string();
+            let email = form_urlencoded::parse(&email_gathered)
+                .into_iter()
+                .map(|x| x.1)
+                .collect::<String>();
             info!("EMAIL: {}", email);
             return Ok(ResponseHandle {
                 body: Some(ResponseBodyType::Email(email)),
                 end_of_stream: true,
+                status: StatusCode::OK,
             });
         }
     } else {
         //TODO: return 422
+        return Ok(ResponseHandle { status: StatusCode::UNPROCESSABLE_ENTITY, body: "<Html><div><p>status 422</p></div></Html>".to_string(), end_of_stream: true })
         return Err(anyhow!(
             "something went really wrong matching the method {:?}",
             request
@@ -184,6 +192,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
     }
     info!("returning empty response");
     return Ok(ResponseHandle {
+        status: StatusCode::NOT_FOUND,
         body: None,
         end_of_stream: true,
     });
