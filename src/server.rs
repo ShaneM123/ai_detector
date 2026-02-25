@@ -3,6 +3,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 use ai_detector::{EmailDataset, EmailDropGuard, Emails};
 use anyhow::{Ok, Result as AnyhowResult};
 use h2::server::Builder;
+use hypertext::prelude::hypertext_elements::search;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{Semaphore, broadcast, mpsc},
@@ -45,42 +46,46 @@ impl Listener {
     pub async fn run(&mut self) -> AnyhowResult<()> {
         info!("accepting inbound connections");
 
-        loop {
-            let permit = self
-                .limit_connections
-                .clone()
-                .acquire_owned()
-                .await
-                .unwrap();
+        while !self.shutdown_complete_tx.is_closed() {
+            {
+                let permit = self
+                    .limit_connections
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .unwrap();
 
-            info!("obtaining socket");
+                info!("obtaining socket");
 
-            let (socket, _addr) = self.accept().await?;
-            info!("obtained socket");
-            let stream = Builder::new()
-                .max_concurrent_streams(150)
-                .initial_connection_window_size(1_000_000)
-                .handshake(socket)
-                .await?;
+                let (socket, _addr) = self.accept().await?;
+                info!("obtained socket");
+                let stream = Builder::new()
+                    .max_concurrent_streams(150)
+                    .initial_connection_window_size(1_000_000)
+                    .handshake(socket)
+                    .await?;
 
-            let mut handler = Handler::new(
-                self.email_dataset_holder.clone(),
-                stream,
-                Shutdown::new(self.notify_shutdown.subscribe()),
-                self.shutdown_complete_tx.clone(),
-            );
+                let mut handler = Handler::new(
+                    self.email_dataset_holder.clone(),
+                    stream,
+                    Shutdown::new(self.notify_shutdown.subscribe()),
+                    self.shutdown_complete_tx.clone(),
+                );
 
-            info!("spawning handler run");
+                info!("spawning handler run");
 
-            //TODO: accept incoming notify shutdown
+                //TODO: accept incoming notify shutdown
 
-            tokio::spawn(async move {
-                if let Err(err) = handler.run().await {
-                    error!(cause = ?err, "connection error");
-                }
-                drop(permit);
-            });
+                tokio::spawn(async move {
+                    if let Err(err) = handler.run().await {
+                        error!(cause = ?err, "connection error");
+                    }
+                    drop(permit);
+                });
+            }
         }
+        info!(" reciever closed ");
+        Ok(())
     }
 
     async fn accept(&mut self) -> AnyhowResult<(TlsStream<TcpStream>, std::net::SocketAddr)> {
@@ -149,8 +154,8 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
             }
         }
         _ = shutdown => {
-            server.notify_shutdown
             info!("shutting down");
+            let _ = server.notify_shutdown.send(())?;
         }
     }
 
@@ -160,6 +165,7 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
         ..
     } = server;
 
+    info!("dropping listener");
     drop(notify_shutdown);
     drop(shutdown_complete_tx);
 

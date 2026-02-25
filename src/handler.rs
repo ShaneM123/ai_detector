@@ -23,7 +23,7 @@ pub struct Handler {
     //todo: create the rs files for this
     connection: server::Connection<TlsStream<TcpStream>, Bytes>,
     shutdown: Shutdown,
-    _shutdown_complete: mpsc::Sender<()>,
+    shutdown_complete: mpsc::Sender<()>,
 }
 
 impl Handler {
@@ -31,13 +31,13 @@ impl Handler {
         email_dataset: EmailDropGuard,
         connection: Connection<TlsStream<TcpStream>, Bytes>,
         shutdown: shutdown::Shutdown,
-        _shutdown_complete: mpsc::Sender<()>,
+        shutdown_complete: mpsc::Sender<()>,
     ) -> Handler {
         Handler {
             email_dataset,
             connection,
             shutdown,
-            _shutdown_complete,
+            shutdown_complete,
         }
     }
 
@@ -48,6 +48,8 @@ impl Handler {
 
                 res =  self.connection.accept() => res,
                 _ = self.shutdown.recv() => {
+                    info!("shutting down handler");
+                    self.shutdown_complete.send(()).await?;
                     return Ok(());
                 }
             };
@@ -75,18 +77,32 @@ impl Handler {
                         guard.analyse()
                     })
                     .await??;
+                    let hompage_html = homepage()?;
 
-                    if res {
-                        Bytes::from("<p>It's a real email</p>")
+                    if res.0 {
+                        Bytes::from(
+                            [
+                                Bytes::from(format!("{} <p>It's a real email</p>", hompage_html)),
+                                Bytes::from(res.1),
+                            ]
+                            .concat(),
+                        )
                     } else {
-                        Bytes::from("<p>It's an AI email</p>")
+                        Bytes::from(
+                            [
+                                Bytes::from(format!("{} <p>It's an AI email</p>", hompage_html,)),
+                                Bytes::from(res.1),
+                            ]
+                            .concat(),
+                        )
                     }
                 }
                 ResponseBodyType::Html(html) => Bytes::from(html),
                 ResponseBodyType::Image(image) => Bytes::from(image),
             };
 
-            let response: Response<()> = Response::builder().status(html_response.status).body(())?;
+            let response: Response<()> =
+                Response::builder().status(html_response.status).body(())?;
 
             let mut resp_res = respond.send_response(response, false)?;
 
@@ -184,11 +200,13 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
         }
     } else {
         //TODO: return 422
-        return Ok(ResponseHandle { status: StatusCode::UNPROCESSABLE_ENTITY, body: "<Html><div><p>status 422</p></div></Html>".to_string(), end_of_stream: true })
-        return Err(anyhow!(
-            "something went really wrong matching the method {:?}",
-            request
-        ));
+        return Ok(ResponseHandle {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            body: Some(ResponseBodyType::Html(
+                "<Html><div><p>status 422</p></div></Html>".to_string(),
+            )),
+            end_of_stream: true,
+        });
     }
     info!("returning empty response");
     return Ok(ResponseHandle {

@@ -5,12 +5,12 @@ use std::{
     sync::Arc,
 };
 
-use polars::prelude::{LazyFrame, PlPath, ScanArgsParquet, col};
-
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use csv::ReaderBuilder;
 use flate2::{Compress, Compression, Status};
 use mail_parser::MessageParser;
+use plotters::prelude::*;
+use polars::prelude::{LazyFrame, PlPath, ScanArgsParquet, col};
 use tokio::sync::Mutex;
 use tracing::info;
 
@@ -95,7 +95,7 @@ impl Emails {
         Ok(())
     }
 
-    pub fn analyse(&self) -> AnyhowResult<bool> {
+    pub fn analyse(&self) -> AnyhowResult<(bool, Vec<u8>)> {
         //calculate distances
         for input_email in self
             .input_email
@@ -134,17 +134,18 @@ impl Emails {
             distances.sort_by(|a, b| cmp_f64(&a.1.iter().sum(), &b.1.iter().sum()));
 
             let total_true = distances.iter().take(13).filter(|x| x.0).count();
+            let image = self.generate_image()?;
+
             if total_true < 7 {
                 info!("Its a real email");
-                return Ok(true);
+                return Ok((true, image));
             } else {
                 info!("It's written by ai");
-                return Ok(false);
+                return Ok((false, image));
             }
         }
         Err(anyhow!("couldnt analyse email"))
     }
-
     pub fn ncd(
         features_one: (String, Features),
         features_two: (String, Features),
@@ -175,6 +176,71 @@ impl Emails {
                 accum + (features.0 - features.1).powf(2.0)
             })
             .sqrt()
+    }
+
+    fn generate_image(&self) -> AnyhowResult<Vec<u8>> {
+        let width = 3200;
+        let height = 2080;
+        let mut buffer = vec![0u8; (width * height * 3) as usize];
+
+        let root_area: DrawingArea<BitMapBackend<'_>, plotters::coord::Shift> =
+            BitMapBackend::with_buffer_and_format(&mut buffer, (3200, 2080))?.into_drawing_area();
+        root_area.fill(&WHITE)?;
+
+        let mut ctx: ChartContext<
+            '_,
+            BitMapBackend<'_>,
+            Cartesian2d<
+                plotters::coord::types::RangedCoordf64,
+                plotters::coord::types::RangedCoordf64,
+            >,
+        > = ChartBuilder::on(&root_area)
+            .set_label_area_size(LabelAreaPosition::Left, 100)
+            .set_label_area_size(LabelAreaPosition::Bottom, 100)
+            .caption("Real ▲ vs AI o", ("sans-serif", 60))
+            .build_cartesian_2d(0.0..1.2, 0.0..1.2)?;
+
+        let original_style = ShapeStyle {
+            color: GREEN.mix(0.6),
+            filled: true,
+            stroke_width: 3,
+        };
+
+        ctx.configure_mesh().draw()?;
+
+        ctx.draw_series(self.real_emails.features_map.iter().map(|point| {
+            TriangleMarker::new(
+                (point.1.1.vocab_richness, point.1.1.compression_ratio),
+                12,
+                &BLUE,
+            )
+        }))?;
+
+        ctx.draw_series(self.ai_emails.features_map.iter().map(|point| {
+            Circle::new(
+                (point.1.1.vocab_richness, point.1.1.compression_ratio),
+                12,
+                &RED,
+            )
+        }))?;
+
+        ctx.draw_series(
+            self.input_email
+                .as_ref()
+                .expect("no input email found")
+                .features_map
+                .iter()
+                .map(|point| {
+                    Circle::new(
+                        (point.1.1.vocab_richness, point.1.1.compression_ratio),
+                        15,
+                        ShapeStyle::filled(&original_style),
+                    )
+                }),
+        )?;
+        drop(root_area);
+        drop(ctx);
+        Ok(buffer)
     }
 }
 
