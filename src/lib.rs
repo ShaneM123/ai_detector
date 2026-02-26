@@ -1,6 +1,7 @@
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
+    io::Cursor,
     path::Path,
     sync::Arc,
 };
@@ -8,6 +9,7 @@ use std::{
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use csv::ReaderBuilder;
 use flate2::{Compress, Compression, Status};
+use image::{ImageBuffer, ImageReader, Rgb};
 use mail_parser::MessageParser;
 use plotters::prelude::*;
 use polars::prelude::{LazyFrame, PlPath, ScanArgsParquet, col};
@@ -238,9 +240,17 @@ impl Emails {
                     )
                 }),
         )?;
-        drop(root_area);
-        drop(ctx);
-        Ok(buffer)
+        let img = ImageBuffer::from_raw(width, height, buffer)
+            .ok_or(Err(anyhow!("error obtaining image buffer")));
+        let img = match img {
+            std::result::Result::Ok(res) => res,
+            Err(e) => e?,
+        }
+
+        let mut png_bytes = Vec::new();
+        img.write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)?;
+
+        Ok(png_bytes)
     }
 }
 

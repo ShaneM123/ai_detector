@@ -6,6 +6,7 @@ use ai_detector::{EmailDropGuard, Emails};
 use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::{Ok, Result as AnyhowResult};
+use base64::{Engine as _, engine::general_purpose};
 use bytes::Bytes;
 use form_urlencoded;
 use h2::RecvStream;
@@ -18,6 +19,7 @@ use tokio::io::AsyncReadExt;
 use tokio::{net::TcpStream, sync::mpsc};
 use tokio_rustls::server::TlsStream;
 use tracing::info;
+
 pub struct Handler {
     email_dataset: EmailDropGuard,
     //todo: create the rs files for this
@@ -61,7 +63,12 @@ impl Handler {
 
             let html_response = process_request(request).await?;
 
-            let response_body = match html_response.body.expect("empty response body") {
+            let response: Response<()> = Response::builder()
+                .header("Content-Type", "text/html")
+                .status(html_response.status)
+                .body(())?;
+
+            let _ = match html_response.body.expect("empty response body") {
                 ResponseBodyType::Email(email) => {
                     {
                         let mut guard: tokio::sync::MutexGuard<'_, Emails> =
@@ -78,36 +85,41 @@ impl Handler {
                     })
                     .await??;
                     let hompage_html = homepage()?;
-
+                    let mut body = Bytes::new();
                     if res.0 {
-                        Bytes::from(
-                            [
-                                Bytes::from(format!("{} <p>It's a real email</p>", hompage_html)),
-                                Bytes::from(res.1),
-                            ]
-                            .concat(),
-                        )
+                        body = Bytes::from(format!("{} <p>It's a real email</p>", hompage_html));
                     } else {
-                        Bytes::from(
-                            [
-                                Bytes::from(format!("{} <p>It's an AI email</p>", hompage_html,)),
-                                Bytes::from(res.1),
-                            ]
-                            .concat(),
-                        )
+                        body = Bytes::from(format!("{} <p>It's an AI email</p>", hompage_html));
                     }
+
+                    let mut send_stream = respond.send_response(response, false)?;
+                    send_stream.send_data(body, false)?;
+                    let encoded = general_purpose::STANDARD.encode(res.1);
+
+                    send_stream.send_data(
+                        Bytes::from(format!(
+                            "<img src=\"data:image/png;base64,{}\" alt=\"Embedded Image\">",
+                            encoded
+                        )),
+                        true,
+                    )?;
                 }
-                ResponseBodyType::Html(html) => Bytes::from(html),
-                ResponseBodyType::Image(image) => Bytes::from(image),
+
+                ResponseBodyType::Html(html) => {
+                    let mut send_stream = respond.send_response(response, false)?;
+                    send_stream.send_data(Bytes::from(html), true)?;
+                }
+
+                ResponseBodyType::Image(image) => {
+                    let response: Response<()> = Response::builder()
+                        .header("Content-Type", "image/png")
+                        .status(html_response.status)
+                        .body(())?;
+                    let mut send_stream = respond.send_response(response, false)?;
+
+                    send_stream.send_data(Bytes::from(image), true)?;
+                }
             };
-
-            let response: Response<()> =
-                Response::builder().status(html_response.status).body(())?;
-
-            let mut resp_res = respond.send_response(response, false)?;
-
-            //response.body(html_response);
-            let _ = resp_res.send_data(response_body, html_response.end_of_stream)?;
         }
         Ok(())
     }
