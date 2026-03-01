@@ -9,10 +9,13 @@ use std::{
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use csv::ReaderBuilder;
 use flate2::{Compress, Compression, Status};
-use image::{ImageBuffer, ImageReader, Rgb};
+use image::{ImageBuffer, ImageReader, Rgb, RgbImage};
 use mail_parser::MessageParser;
 use plotters::prelude::*;
-use polars::prelude::{LazyFrame, PlPath, ScanArgsParquet, col};
+use polars::{
+    chunked_array::collect,
+    prelude::{LazyFrame, PlPath, ScanArgsParquet, col},
+};
 use tokio::sync::Mutex;
 use tracing::info;
 
@@ -184,68 +187,74 @@ impl Emails {
         let width = 3200;
         let height = 2080;
         let mut buffer = vec![0u8; (width * height * 3) as usize];
+        {
+            let root_area: DrawingArea<BitMapBackend<'_>, plotters::coord::Shift> =
+                BitMapBackend::with_buffer_and_format(&mut buffer, (3200, 2080))?
+                    .into_drawing_area();
+            root_area.fill(&WHITE)?;
 
-        let root_area: DrawingArea<BitMapBackend<'_>, plotters::coord::Shift> =
-            BitMapBackend::with_buffer_and_format(&mut buffer, (3200, 2080))?.into_drawing_area();
-        root_area.fill(&WHITE)?;
+            let mut ctx: ChartContext<
+                '_,
+                BitMapBackend<'_>,
+                Cartesian2d<
+                    plotters::coord::types::RangedCoordf64,
+                    plotters::coord::types::RangedCoordf64,
+                >,
+            > = ChartBuilder::on(&root_area)
+                .set_label_area_size(LabelAreaPosition::Left, 100)
+                .set_label_area_size(LabelAreaPosition::Bottom, 100)
+                .caption(
+                    "Real Emails (Triangle) vs AI Emails (O's)",
+                    ("sans-serif", 80),
+                )
+                .build_cartesian_2d(0.0..1.2, 0.0..1.2)?;
 
-        let mut ctx: ChartContext<
-            '_,
-            BitMapBackend<'_>,
-            Cartesian2d<
-                plotters::coord::types::RangedCoordf64,
-                plotters::coord::types::RangedCoordf64,
-            >,
-        > = ChartBuilder::on(&root_area)
-            .set_label_area_size(LabelAreaPosition::Left, 100)
-            .set_label_area_size(LabelAreaPosition::Bottom, 100)
-            .caption("Real ▲ vs AI o", ("sans-serif", 60))
-            .build_cartesian_2d(0.0..1.2, 0.0..1.2)?;
+            let original_style = ShapeStyle {
+                color: GREEN.mix(0.8),
+                filled: true,
+                stroke_width: 4,
+            };
 
-        let original_style = ShapeStyle {
-            color: GREEN.mix(0.6),
-            filled: true,
-            stroke_width: 3,
-        };
+            ctx.configure_mesh().draw()?;
 
-        ctx.configure_mesh().draw()?;
+            ctx.draw_series(self.real_emails.features_map.iter().map(|point| {
+                TriangleMarker::new(
+                    (point.1.1.vocab_richness, point.1.1.compression_ratio),
+                    12,
+                    &BLUE,
+                )
+            }))?;
 
-        ctx.draw_series(self.real_emails.features_map.iter().map(|point| {
-            TriangleMarker::new(
-                (point.1.1.vocab_richness, point.1.1.compression_ratio),
-                12,
-                &BLUE,
-            )
-        }))?;
+            ctx.draw_series(self.ai_emails.features_map.iter().map(|point| {
+                Circle::new(
+                    (point.1.1.vocab_richness, point.1.1.compression_ratio),
+                    12,
+                    &RED,
+                )
+            }))?;
 
-        ctx.draw_series(self.ai_emails.features_map.iter().map(|point| {
-            Circle::new(
-                (point.1.1.vocab_richness, point.1.1.compression_ratio),
-                12,
-                &RED,
-            )
-        }))?;
+            ctx.draw_series(
+                self.input_email
+                    .as_ref()
+                    .expect("no input email found")
+                    .features_map
+                    .iter()
+                    .map(|point| {
+                        Circle::new(
+                            (point.1.1.vocab_richness, point.1.1.compression_ratio),
+                            15,
+                            ShapeStyle::filled(&original_style),
+                        )
+                    }),
+            )?;
+        }
 
-        ctx.draw_series(
-            self.input_email
-                .as_ref()
-                .expect("no input email found")
-                .features_map
-                .iter()
-                .map(|point| {
-                    Circle::new(
-                        (point.1.1.vocab_richness, point.1.1.compression_ratio),
-                        15,
-                        ShapeStyle::filled(&original_style),
-                    )
-                }),
-        )?;
-        let img = ImageBuffer::from_raw(width, height, buffer)
+        let img = ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(width, height, buffer)
             .ok_or(Err(anyhow!("error obtaining image buffer")));
-        let img = match img {
+        let img: ImageBuffer<Rgb<u8>, Vec<u8>> = match img {
             std::result::Result::Ok(res) => res,
             Err(e) => e?,
-        }
+        };
 
         let mut png_bytes = Vec::new();
         img.write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)?;

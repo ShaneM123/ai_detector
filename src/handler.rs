@@ -98,7 +98,7 @@ impl Handler {
 
                     send_stream.send_data(
                         Bytes::from(format!(
-                            "<img src=\"data:image/png;base64,{}\" alt=\"Embedded Image\">",
+                            "<img src=\"data:image/png;base64,{}\" style=\"max-width: 80%; height: auto; display: block;\" alt=\"Embedded Image\">",
                             encoded
                         )),
                         true,

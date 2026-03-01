@@ -3,6 +3,8 @@ use hypertext::prelude::*;
 
 pub fn homepage() -> AnyhowResult<String> {
     let response_html = rsx! {
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <div>
             <form action="/submit" method="post" class="form-example">
       <div class="form-example">
