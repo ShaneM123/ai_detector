@@ -9,13 +9,10 @@ use std::{
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use csv::ReaderBuilder;
 use flate2::{Compress, Compression, Status};
-use image::{ImageBuffer, ImageReader, Rgb, RgbImage};
+use image::{ImageBuffer, Rgb};
 use mail_parser::MessageParser;
 use plotters::prelude::*;
-use polars::{
-    chunked_array::collect,
-    prelude::{LazyFrame, PlPath, ScanArgsParquet, col},
-};
+use polars::prelude::{LazyFrame, PlPath, ScanArgsParquet, col};
 use tokio::sync::Mutex;
 use tracing::info;
 

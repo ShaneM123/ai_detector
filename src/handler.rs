@@ -1,10 +1,6 @@
-use std::sync::Arc;
-
 use crate::homepage::homepage;
 use crate::shutdown::{self, Shutdown};
 use ai_detector::{EmailDropGuard, Emails};
-use anyhow::Result;
-use anyhow::anyhow;
 use anyhow::{Ok, Result as AnyhowResult};
 use base64::{Engine as _, engine::general_purpose};
 use bytes::Bytes;
@@ -13,9 +9,6 @@ use h2::RecvStream;
 use h2::server::{self, Connection};
 use http::{Method, Request};
 use http::{Response, StatusCode};
-use tokio::fs;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
 use tokio::{net::TcpStream, sync::mpsc};
 use tokio_rustls::server::TlsStream;
 use tracing::info;
@@ -128,8 +121,7 @@ impl Handler {
 #[derive(Debug)]
 pub struct ResponseHandle {
     status: StatusCode,
-    pub body: Option<ResponseBodyType>,
-    end_of_stream: bool,
+    body: Option<ResponseBodyType>,
 }
 
 #[derive(Debug)]
@@ -148,14 +140,12 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             return Ok(ResponseHandle {
                 status: StatusCode::OK,
                 body: Some(ResponseBodyType::Html(hompage_html)),
-                end_of_stream: true,
             });
         } else if request.uri().path().contains("favicon.ico") {
             let favicon = tokio::fs::read("cuddlyferris.png").await?;
             return Ok(ResponseHandle {
                 status: StatusCode::OK,
                 body: Some(ResponseBodyType::Image(favicon)),
-                end_of_stream: true,
             });
         } else {
             let req_path = request.uri().path();
@@ -163,7 +153,6 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             return Ok(ResponseHandle {
                 status: StatusCode::OK,
                 body: Some(ResponseBodyType::Html("<Html></Html>".to_string())),
-                end_of_stream: true,
             });
         }
     } else if Method::POST == *request.method() {
@@ -184,7 +173,6 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                             "<Html><div><p>email too long, try a shorter one</p></div></Html>"
                                 .to_string(),
                         )),
-                        end_of_stream: true,
                     });
                 }
             }
@@ -195,7 +183,6 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                         "<Html><div><p>email too short, try a longer one</p></div></Html>"
                             .to_string(),
                     )),
-                    end_of_stream: true,
                 });
             }
             info!("email_gathered {}", email_gathered.len());
@@ -206,7 +193,6 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             info!("EMAIL: {}", email);
             return Ok(ResponseHandle {
                 body: Some(ResponseBodyType::Email(email)),
-                end_of_stream: true,
                 status: StatusCode::OK,
             });
         }
@@ -217,13 +203,11 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             body: Some(ResponseBodyType::Html(
                 "<Html><div><p>status 422</p></div></Html>".to_string(),
             )),
-            end_of_stream: true,
         });
     }
     info!("returning empty response");
     return Ok(ResponseHandle {
         status: StatusCode::NOT_FOUND,
         body: None,
-        end_of_stream: true,
     });
 }

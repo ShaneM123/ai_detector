@@ -3,22 +3,17 @@ use std::path::Path;
 use tokio::signal;
 use tracing::info;
 
-mod connections;
 mod handler;
 mod homepage;
 mod server;
 mod shutdown;
+
 // TODO:
 // some kind of benchmark
 // implement LZJD later
 // allow users to set datasets
 // allow users to set k value
 // allow user to set features
-
-//TODO: single thread load data sets and put them behind a mutex on startup
-// accept incoming connections and pass it to analyse, allow user to set k values
-// return result and png image of graph
-// delete graphs
 
 #[derive(Debug, Clone)]
 struct Config {
@@ -36,7 +31,7 @@ impl Config {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let trace: Result<(), Box<dyn std::error::Error + Send + Sync>> =
+    let _trace: Result<(), Box<dyn std::error::Error + Send + Sync>> =
         tracing_subscriber::fmt::try_init();
 
     let emails = tokio::task::spawn_blocking(|| {

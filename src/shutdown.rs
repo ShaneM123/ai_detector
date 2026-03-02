@@ -1,4 +1,4 @@
-use tokio::sync::{broadcast, futures::Notified};
+use tokio::sync::broadcast;
 
 #[derive(Debug)]
 pub(crate) struct Shutdown {

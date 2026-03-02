@@ -1,14 +1,15 @@
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
-use ai_detector::{EmailDataset, EmailDropGuard, Emails};
+use ai_detector::EmailDropGuard;
 use anyhow::{Ok, Result as AnyhowResult};
 use h2::server::Builder;
-use hypertext::prelude::hypertext_elements::search;
+use tokio::time::timeout;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{Semaphore, broadcast, mpsc},
     time,
 };
+
 use tokio_rustls::{
     TlsAcceptor,
     rustls::{
@@ -22,17 +23,6 @@ use tracing::{error, info};
 
 use crate::{Config, handler::Handler, shutdown::Shutdown};
 
-//TODO: create h2 Connection
-// call accept on Connection
-// main / acceptor loop
-//   ↓ spawns per-connection tasks
-// Connection Handler (tokio_rustls + h2::server::Connection)
-//   ↓ accepts streams → minimal req conversion → calls app service
-// Application Service (axum::Router / tower::Service / custom hyper-like service)
-//   ↓ middleware stack
-// Route Handlers / Business Logic
-//   ↓ DB calls, file serving, external requests, response building
-// Body streaming back up the chain → h2 → TLS → TCP
 struct Listener {
     acceptor: TlsAcceptor,
     listener: TcpListener,
@@ -48,17 +38,12 @@ impl Listener {
 
         while !self.shutdown_complete_tx.is_closed() {
             {
-                let permit = self
-                    .limit_connections
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .unwrap();
+                let permit = self.limit_connections.clone().acquire_owned().await?;
 
                 info!("obtaining socket");
 
-                let (socket, _addr) = self.accept().await?;
-                info!("obtained socket");
+                let (socket, addr) = self.accept().await?;
+                info!("obtained socket for address {}", addr);
                 let stream = Builder::new()
                     .max_concurrent_streams(150)
                     .initial_connection_window_size(1_000_000)
@@ -72,16 +57,14 @@ impl Listener {
                     self.shutdown_complete_tx.clone(),
                 );
 
-                info!("spawning handler run");
+                info!("spawning handler run for address");
 
-                //TODO: accept incoming notify shutdown
-
-                tokio::spawn(async move {
+                tokio::spawn(timeout(Duration::from_mins(10), async move {
                     if let Err(err) = handler.run().await {
                         error!(cause = ?err, "connection error");
                     }
                     drop(permit);
-                });
+                }));
             }
         }
         info!(" reciever closed ");
