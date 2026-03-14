@@ -1,8 +1,14 @@
+use std::net::IpAddr;
+use std::num::{NonZero, NonZeroU32};
 use std::{sync::Arc, time::Duration};
 
 use ai_detector::EmailDropGuard;
 use anyhow::{Ok, Result as AnyhowResult};
+use governor::clock::{QuantaClock, Reference};
+use governor::state::keyed::DashMapStateStore;
+use governor::{Jitter, Quota, RateLimiter};
 use h2::server::Builder;
+use http::{HeaderMap, HeaderName};
 use tokio::time::timeout;
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -30,6 +36,9 @@ struct Listener {
     limit_connections: Arc<Semaphore>,
     notify_shutdown: broadcast::Sender<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
+    origin: String,
+    headers: HeaderMap,
+    ip_limiter: Arc<RateLimiter<IpAddr, DashMapStateStore<IpAddr>, QuantaClock>>,
 }
 
 impl Listener {
@@ -43,6 +52,7 @@ impl Listener {
                 info!("obtaining socket");
 
                 let (socket, addr) = self.accept().await?;
+
                 info!("obtained socket for address {}", addr);
                 let stream = Builder::new()
                     .max_concurrent_streams(150)
@@ -55,6 +65,8 @@ impl Listener {
                     stream,
                     Shutdown::new(self.notify_shutdown.subscribe()),
                     self.shutdown_complete_tx.clone(),
+                    self.origin.clone(),
+                    self.headers.clone(),
                 );
 
                 info!("spawning handler run for address");
@@ -77,6 +89,14 @@ impl Listener {
         loop {
             match self.listener.accept().await {
                 std::result::Result::Ok((socket, addr)) => {
+                    self.ip_limiter
+                        .until_key_n_ready_with_jitter(
+                            &addr.ip(),
+                            NonZeroU32::new(9).unwrap(),
+                            Jitter::up_to(Duration::from_secs(30)),
+                        )
+                        .await?;
+
                     info!("accepting acceptor");
                     let accepted_stream = self.acceptor.accept(socket).await?;
                     info!("returning stream");
@@ -99,15 +119,15 @@ impl Listener {
     }
 }
 
-const MAX_CONNECTIONS: usize = 250;
+const MAX_CONNECTIONS: usize = 350;
 
 pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<()> {
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, mut shutdown_complete_rx_) = mpsc::channel(1);
 
     let certs =
-        CertificateDer::pem_file_iter("test_server2.crt")?.collect::<Result<Vec<_>, _>>()?;
-    let key = PrivateKeyDer::from_pem_file("test_server2.key")?;
+        CertificateDer::pem_file_iter(server_config.server_cert)?.collect::<Result<Vec<_>, _>>()?;
+    let key = PrivateKeyDer::from_pem_file(server_config.server_key)?;
 
     let mut config = rustls::ServerConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
@@ -117,9 +137,36 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
     .with_single_cert(certs, key)?;
     config.alpn_protocols = vec![b"h2".to_vec()];
 
+    let mut headers = HeaderMap::new();
+
+    headers.insert(
+        HeaderName::from_static("HOST"),
+        server_config.origin.parse().unwrap(),
+    );
+    headers.insert(
+        HeaderName::from_static("Accept"),
+        "application/json, text/html, */*".parse().unwrap(),
+    );
+    headers.insert(
+        HeaderName::from_static("Accept-Language"),
+        "en-US,en;".parse().unwrap(),
+    );
+    headers.insert(
+        "Content-Type",
+        "application/x-www-form-urlencoded, multipart/form-data, text/plain"
+            .parse()
+            .unwrap(),
+    );
+
     let listener = TcpListener::bind(server_config.server_address).await?;
 
     let acceptor = TlsAcceptor::from(Arc::new(config));
+
+    let ip_limiter: Arc<RateLimiter<IpAddr, DashMapStateStore<IpAddr>, QuantaClock>> =
+        Arc::new(RateLimiter::dashmap(
+            Quota::per_second(NonZeroU32::new(30).unwrap())
+                .allow_burst(NonZeroU32::new(20).unwrap()),
+        ));
 
     let mut server: Listener = Listener {
         acceptor,
@@ -128,6 +175,9 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
         limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         notify_shutdown,
         shutdown_complete_tx,
+        origin: server_config.origin,
+        headers: headers,
+        ip_limiter: ip_limiter,
     };
 
     tokio::select! {

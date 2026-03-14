@@ -2,3 +2,4 @@
 /enron_data
 .~lock.ai_emails.csv#
 chart.png
+*.env
