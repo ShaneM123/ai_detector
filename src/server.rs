@@ -1,10 +1,10 @@
 use std::net::IpAddr;
-use std::num::{NonZero, NonZeroU32};
+use std::num::NonZeroU32;
 use std::{sync::Arc, time::Duration};
 
 use ai_detector::EmailDropGuard;
-use anyhow::{Ok, Result as AnyhowResult};
-use governor::clock::{QuantaClock, Reference};
+use anyhow::{Ok, Result as AnyhowResult, anyhow};
+use governor::clock::QuantaClock;
 use governor::state::keyed::DashMapStateStore;
 use governor::{Jitter, Quota, RateLimiter};
 use h2::server::Builder;
@@ -41,24 +41,51 @@ struct Listener {
     ip_limiter: Arc<RateLimiter<IpAddr, DashMapStateStore<IpAddr>, QuantaClock>>,
 }
 
+//TODO: handle errors gracefully, dont crash whole server because of one bad connection
 impl Listener {
     pub async fn run(&mut self) -> AnyhowResult<()> {
         info!("accepting inbound connections");
 
         while !self.shutdown_complete_tx.is_closed() {
             {
-                let permit = self.limit_connections.clone().acquire_owned().await?;
+                let permit: tokio::sync::OwnedSemaphorePermit =
+                    match self.limit_connections.clone().acquire_owned().await {
+                        std::result::Result::Ok(val) => val,
+
+                        Err(e) => {
+                            // probably should not continue if the semaphore closes
+                            return Err(anyhow!("tried to obtain semaphore, got error: {}", e));
+                        }
+                    };
 
                 info!("obtaining socket");
 
-                let (socket, addr) = self.accept().await?;
+                let (socket, addr) = match self.accept().await {
+                    std::result::Result::Ok(val) => val,
+                    Err(e) => {
+                        //TODO: handle each type of error individually where need be
+                        error!("tried to accept Stream, got error: {}", e);
+                        continue;
+                    }
+                };
 
                 info!("obtained socket for address {}", addr);
-                let stream = Builder::new()
+                let stream = match Builder::new()
                     .max_concurrent_streams(150)
                     .initial_connection_window_size(1_000_000)
                     .handshake(socket)
-                    .await?;
+                    .await
+                {
+                    std::result::Result::Ok(val) => val,
+                    Err(e) => {
+                        error!(
+                            "tried to TLS Handshake Stream on address {} , got error: {}",
+                            addr, e
+                        );
+
+                        continue;
+                    }
+                };
 
                 let mut handler = Handler::new(
                     self.email_dataset_holder.clone(),
@@ -79,6 +106,7 @@ impl Listener {
                 }));
             }
         }
+
         info!(" reciever closed ");
         Ok(())
     }
@@ -89,16 +117,32 @@ impl Listener {
         loop {
             match self.listener.accept().await {
                 std::result::Result::Ok((socket, addr)) => {
-                    self.ip_limiter
+                    match self
+                        .ip_limiter
                         .until_key_n_ready_with_jitter(
                             &addr.ip(),
                             NonZeroU32::new(9).unwrap(),
                             Jitter::up_to(Duration::from_secs(30)),
                         )
-                        .await?;
+                        .await
+                    {
+                        std::result::Result::Ok(k) => k,
+                        Err(e) => {
+                            return Err(anyhow!("insuffecient limiter bucket capacity: {}", e));
+                        }
+                    }
 
                     info!("accepting acceptor");
-                    let accepted_stream = self.acceptor.accept(socket).await?;
+                    let accepted_stream = match self.acceptor.accept(socket).await {
+                        std::result::Result::Ok(val) => val,
+                        Err(e) => {
+                            return Err(anyhow!(
+                                "tls acceptance for address {} , error: {}",
+                                addr,
+                                e
+                            ));
+                        }
+                    };
                     info!("returning stream");
                     return Ok((accepted_stream, addr));
                 }
@@ -119,7 +163,7 @@ impl Listener {
     }
 }
 
-const MAX_CONNECTIONS: usize = 350;
+const MAX_CONNECTIONS: usize = 600;
 
 pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<()> {
     let (notify_shutdown, _) = broadcast::channel(1);
@@ -140,19 +184,19 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
     let mut headers = HeaderMap::new();
 
     headers.insert(
-        HeaderName::from_static("HOST"),
+        HeaderName::from_static("host"),
         server_config.origin.parse().unwrap(),
     );
     headers.insert(
-        HeaderName::from_static("Accept"),
+        HeaderName::from_static("accept"),
         "application/json, text/html, */*".parse().unwrap(),
     );
     headers.insert(
-        HeaderName::from_static("Accept-Language"),
+        HeaderName::from_static("accept-language"),
         "en-US,en;".parse().unwrap(),
     );
     headers.insert(
-        "Content-Type",
+        HeaderName::from_static("content-type"),
         "application/x-www-form-urlencoded, multipart/form-data, text/plain"
             .parse()
             .unwrap(),

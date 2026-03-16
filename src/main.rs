@@ -41,6 +41,7 @@ impl Config {
         }
     }
 }
+//TODO: bigger numbers and the einheit
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -56,7 +56,7 @@ impl Handler {
         info!("run handler");
         while !self.shutdown.is_shutdown() {
             limiter
-                .until_ready_with_jitter(Jitter::up_to(Duration::from_millis(2_569)))
+                .until_ready_with_jitter(Jitter::up_to(Duration::from_millis(3_569)))
                 .await;
             let maybe_request = tokio::select! {
 
@@ -84,7 +84,7 @@ impl Handler {
                 .header("Referrer-Policy", "strict-origin-when-cross-origin")
                 .header(
                     "Content-Security-Policy",
-                    "default-src 'self'; form-action 'self';",
+                    "default-src 'self'; img-src 'self' data:; form-action 'self';",
                 )
                 .header("Content-Language", "en");
 
@@ -168,19 +168,24 @@ impl Handler {
         if request
             .uri()
             .authority()
-            .map(|x| x.as_str().to_ascii_lowercase() != origin.to_ascii_lowercase())
+            .map(|x| x.host().to_ascii_lowercase() != origin.to_ascii_lowercase())
             .is_none_or(|x| !x)
         {
             return Err(anyhow!("authority read fail"));
         }
         //request.headers().iter().any(|x|   ALLOWED_HEADERS.ix.0.as_str());
 
+        //TODO: fix Header, Origin isnt always required or sent and can be spoofed anyway
         if request
             .headers()
             .get("Origin")
             .map(|x| x.as_bytes() == origin.as_bytes())
-            .is_none_or(|x| !x)
+            .is_some_and(|x| !x)
         {
+            info!(
+                "{}",
+                request.headers().get("Origin").unwrap().to_str().unwrap()
+            );
             return Err(anyhow!("Origin header read fail"));
         }
 
