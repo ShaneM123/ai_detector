@@ -82,9 +82,10 @@ impl Handler {
                 .header("X-Content-Type-Options", "nosniff")
                 .header("X-Frame-Options", "SAMEORIGIN")
                 .header("Referrer-Policy", "strict-origin-when-cross-origin")
+                //TODO: be better to mutate this individually
                 .header(
                     "Content-Security-Policy",
-                    "default-src 'self'; img-src 'self' data:; form-action 'self';",
+                    "default-src 'self'; img-src 'self' data:; form-action 'self'; style-src-attr 'unsafe-hashes' 'sha256-8Y8ZIhn++zkT/pWX+ksEvIwQkmkScdZ1N7zDI23txek=';",
                 )
                 .header("Content-Language", "en");
 
@@ -134,7 +135,7 @@ impl Handler {
 
                     send_stream.send_data(
                         Bytes::from(format!(
-                            "<img src=\"data:image/png;base64,{}\" style=\"max-width: 80%; height: auto; display: block;\" alt=\"Embedded Image\">",
+                            "<img src=\"data:image/png;base64,{}\" style=\"max-width: 80%; height: 80%; display: block;\" alt=\"Embedded Image\">",
                             encoded
                         )),
                         true,

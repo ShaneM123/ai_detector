@@ -198,10 +198,10 @@ impl Emails {
                     plotters::coord::types::RangedCoordf64,
                 >,
             > = ChartBuilder::on(&root_area)
-                .set_label_area_size(LabelAreaPosition::Left, 100)
-                .set_label_area_size(LabelAreaPosition::Bottom, 100)
+                .set_label_area_size(LabelAreaPosition::Left, 200)
+                .set_label_area_size(LabelAreaPosition::Bottom, 150)
                 .caption(
-                    "Real Emails (Triangle) vs AI Emails (O's)",
+                    "Real Emails (Triangle) vs AI Emails (Circles) vs Your Email (Green Circle)",
                     ("sans-serif", 80),
                 )
                 .build_cartesian_2d(0.0..1.2, 0.0..1.2)?;
@@ -212,7 +212,12 @@ impl Emails {
                 stroke_width: 4,
             };
 
-            ctx.configure_mesh().draw()?;
+            ctx.configure_mesh()
+                .x_desc("Vocab Richness")
+                .y_desc("Compression ratio")
+                .x_label_style(("sans-serif", 64, &BLACK).into_text_style(&root_area))
+                .y_label_style(("sans-serif", 64, &BLACK).into_text_style(&root_area))
+                .draw()?;
 
             ctx.draw_series(self.real_emails.features_map.iter().map(|point| {
                 TriangleMarker::new(

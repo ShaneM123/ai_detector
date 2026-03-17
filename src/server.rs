@@ -41,7 +41,6 @@ struct Listener {
     ip_limiter: Arc<RateLimiter<IpAddr, DashMapStateStore<IpAddr>, QuantaClock>>,
 }
 
-//TODO: handle errors gracefully, dont crash whole server because of one bad connection
 impl Listener {
     pub async fn run(&mut self) -> AnyhowResult<()> {
         info!("accepting inbound connections");
