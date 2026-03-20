@@ -41,7 +41,6 @@ impl Config {
         }
     }
 }
-//TODO: bigger numbers and the einheit
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -62,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ai_enron_emails
             .generate_features(Path::new("ai_emails.csv"))
             .unwrap();
-        Emails::new(real_enron_emails, ai_enron_emails, None).unwrap()
+        Emails::new(real_enron_emails, ai_enron_emails).unwrap()
     })
     .await
     .unwrap();

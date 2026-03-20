@@ -214,6 +214,7 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
     let mut server: Listener = Listener {
         acceptor,
         listener,
+        //TODO: dont put the input email behind an Mutex, because we are essentially limiting ourselves to a single copy
         email_dataset_holder: EmailDropGuard::new(server_config.emails),
         limit_connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         notify_shutdown,

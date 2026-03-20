@@ -13,18 +13,17 @@ use image::{ImageBuffer, Rgb};
 use mail_parser::MessageParser;
 use plotters::prelude::*;
 use polars::prelude::{LazyFrame, PlPath, ScanArgsParquet, col};
-use tokio::sync::Mutex;
 use tracing::info;
 
 #[derive(Clone)]
 pub struct EmailDropGuard {
-    pub emails: Arc<tokio::sync::Mutex<Emails>>,
+    pub emails: Arc<Emails>,
 }
 
 impl EmailDropGuard {
     pub fn new(emails: Emails) -> EmailDropGuard {
         EmailDropGuard {
-            emails: Arc::new(Mutex::new(emails)),
+            emails: Arc::new(emails),
         }
     }
 }
@@ -70,42 +69,18 @@ type CompressionRatio = f64;
 pub struct Emails {
     pub real_emails: EmailDataset,
     pub ai_emails: EmailDataset,
-    pub input_email: Option<EmailDataset>,
 }
 impl Emails {
-    pub fn new(
-        real_emails: EmailDataset,
-        ai_emails: EmailDataset,
-        input_email: Option<EmailDataset>,
-    ) -> AnyhowResult<Emails> {
+    pub fn new(real_emails: EmailDataset, ai_emails: EmailDataset) -> AnyhowResult<Emails> {
         Ok(Emails {
             real_emails,
             ai_emails,
-            input_email: input_email,
         })
     }
 
-    pub fn set_input(&mut self, input_email: String) -> AnyhowResult<()> {
-        let mut input_dataset = EmailDataset::new();
-        let input_features = calculate_features(&input_email)?;
-        input_dataset
-            .features_map
-            .insert(input_features.0, (input_email.clone(), input_features.1));
-        input_dataset.email_bodies.push(input_email);
-        self.input_email = Some(input_dataset);
-
-        Ok(())
-    }
-
-    pub fn analyse(&self) -> AnyhowResult<(bool, Vec<u8>)> {
+    pub fn analyse(&self, input_email_dataset: EmailDataset) -> AnyhowResult<(bool, Vec<u8>)> {
         //calculate distances
-        for input_email in self
-            .input_email
-            .as_ref()
-            .expect("no input email")
-            .features_map
-            .iter()
-        {
+        for input_email in input_email_dataset.features_map.iter() {
             let mut distances = Vec::new();
 
             for ai_email in self.ai_emails.features_map.iter() {
@@ -136,7 +111,7 @@ impl Emails {
             distances.sort_by(|a, b| cmp_f64(&a.1.iter().sum(), &b.1.iter().sum()));
 
             let total_true = distances.iter().take(13).filter(|x| x.0).count();
-            let image = self.generate_image()?;
+            let image = self.generate_image(input_email_dataset)?;
 
             if total_true < 7 {
                 info!("Its a real email");
@@ -180,7 +155,7 @@ impl Emails {
             .sqrt()
     }
 
-    fn generate_image(&self) -> AnyhowResult<Vec<u8>> {
+    fn generate_image(&self, input_email: EmailDataset) -> AnyhowResult<Vec<u8>> {
         let width = 3200;
         let height = 2080;
         let mut buffer = vec![0u8; (width * height * 3) as usize];
@@ -235,20 +210,13 @@ impl Emails {
                 )
             }))?;
 
-            ctx.draw_series(
-                self.input_email
-                    .as_ref()
-                    .expect("no input email found")
-                    .features_map
-                    .iter()
-                    .map(|point| {
-                        Circle::new(
-                            (point.1.1.vocab_richness, point.1.1.compression_ratio),
-                            15,
-                            ShapeStyle::filled(&original_style),
-                        )
-                    }),
-            )?;
+            ctx.draw_series(input_email.features_map.iter().map(|point| {
+                Circle::new(
+                    (point.1.1.vocab_richness, point.1.1.compression_ratio),
+                    15,
+                    ShapeStyle::filled(&original_style),
+                )
+            }))?;
         }
 
         let img = ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(width, height, buffer)

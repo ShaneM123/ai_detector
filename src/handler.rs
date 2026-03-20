@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::homepage::homepage;
 use crate::shutdown::{self, Shutdown};
-use ai_detector::{EmailDropGuard, Emails};
+use ai_detector::{EmailDataset, EmailDropGuard, calculate_features};
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use base64::{Engine as _, engine::general_purpose};
 use bytes::Bytes;
@@ -18,7 +18,6 @@ use tokio_rustls::server::TlsStream;
 use tracing::info;
 
 //TODO: email input validation via Type Email(String) and deserialse/parse with validation built in basically
-//TODO: some basic bot prevention using governor crate
 pub struct Handler {
     email_dataset: EmailDropGuard,
     //todo: create the rs files for this
@@ -103,18 +102,19 @@ impl Handler {
 
             let _ = match html_response.body.expect("empty response body") {
                 ResponseBodyType::Email(email) => {
-                    {
-                        let mut guard: tokio::sync::MutexGuard<'_, Emails> =
-                            self.email_dataset.emails.lock().await;
-                        guard.set_input(email)?;
-                    }
+                    let mut input_dataset = EmailDataset::new();
+                    let input_features = calculate_features(&email)?;
+                    input_dataset
+                        .features_map
+                        .insert(input_features.0, (email.clone(), input_features.1));
+                    input_dataset.email_bodies.push(email);
                     info!("ANALYSING EMAIL");
 
                     let email_clone = self.email_dataset.emails.clone();
 
                     let res = tokio::task::spawn_blocking(move || {
-                        let guard = email_clone.blocking_lock();
-                        guard.analyse()
+                        let guard = email_clone;
+                        guard.analyse(input_dataset)
                     })
                     .await??;
                     let hompage_html = homepage()?;
@@ -174,7 +174,6 @@ impl Handler {
         {
             return Err(anyhow!("authority read fail"));
         }
-        //request.headers().iter().any(|x|   ALLOWED_HEADERS.ix.0.as_str());
 
         //TODO: fix Header, Origin isnt always required or sent and can be spoofed anyway
         if request
@@ -252,7 +251,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     });
                 }
             }
-            if email_gathered.len() < 6 {
+            if email_gathered.len() < 16 {
                 return Ok(ResponseHandle {
                     status: StatusCode::OK,
                     body: Some(ResponseBodyType::Html(
@@ -261,6 +260,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     )),
                 });
             }
+            //TODO: read more about utf-8 standard
             info!("email_gathered {}", email_gathered.len());
             let email = form_urlencoded::parse(&email_gathered)
                 .into_iter()
