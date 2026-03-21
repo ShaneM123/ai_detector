@@ -311,31 +311,36 @@ impl EmailDataset {
     }
 }
 
-pub fn calculate_features(email: &String) -> AnyhowResult<(Vec<u8>, Features)> {
+pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> {
     // -- calculate compression ratio --
 
-    let input = email.as_bytes().to_vec();
+    let input = email;
     let (compression_length, compressed_email) = compress(&input)?;
     let compression_ratio: f64 = compression_length / input.len() as f64;
 
     // -- calculate average sentence length --
 
+    //TODO: WIP
+
     let sentence_accum = email
-        .split_terminator(|c: char| c == '.' || c == '!' || c == '?')
-        .filter(|s| !s.trim().is_empty())
+        .split(|x| *x == b'.' || *x == b'!' || *x == b'?' || *x == b'\n')
+        .filter(|x| x.trim_ascii().is_empty())
         .fold((0.0, 0.0), |(count, total), val| {
             (count + 1.0, total + (val.len() as f64))
         });
-
     let avg = sentence_accum.1 / sentence_accum.0;
 
     // -- calculate vocab richness --
 
-    let words = email.split_ascii_whitespace();
+    //TODO: split by ascii white spaces
+
+    let words = email.split().filter(BytesIsNotEmpty);
+
+    // .split(|x| *x == b' ' || *x == b'\n');
 
     let word_count = words.clone().count() as f64;
 
-    let unique_word_count = words.into_iter().collect::<HashSet<&str>>().len() as f64;
+    let unique_word_count = words.into_iter().collect::<HashSet<&[u8]>>().len() as f64;
     let vocab_richness = unique_word_count / word_count;
 
     // -- sentence length variance --

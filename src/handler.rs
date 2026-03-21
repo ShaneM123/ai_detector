@@ -103,6 +103,7 @@ impl Handler {
             let _ = match html_response.body.expect("empty response body") {
                 ResponseBodyType::Email(email) => {
                     let mut input_dataset = EmailDataset::new();
+                    //TODO: convert email to Vec<u8> because we never need it not to be really.
                     let input_features = calculate_features(&email)?;
                     input_dataset
                         .features_map
@@ -201,7 +202,7 @@ pub struct ResponseHandle {
 
 #[derive(Debug)]
 enum ResponseBodyType {
-    Email(String),
+    Email(Vec<u8>),
     Html(String),
     Image(Vec<u8>),
 }
@@ -260,15 +261,13 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     )),
                 });
             }
-            //TODO: read more about utf-8 standard
             info!("email_gathered {}", email_gathered.len());
-            let email = form_urlencoded::parse(&email_gathered)
-                .into_iter()
-                .map(|x| x.1)
-                .collect::<String>();
-            info!("EMAIL: {}", email);
+            // let email = form_urlencoded::parse(&email_gathered)
+            //     .into_iter()
+            //     .map(|x| x.1)
+            //     .collect::<String>();
             return Ok(ResponseHandle {
-                body: Some(ResponseBodyType::Email(email)),
+                body: Some(ResponseBodyType::Email(email_gathered)),
                 status: StatusCode::OK,
             });
         }
