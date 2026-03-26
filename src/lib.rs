@@ -30,8 +30,8 @@ impl EmailDropGuard {
 
 #[derive(Debug, Clone)]
 pub struct EmailDataset {
-    pub features_map: HashMap<CompressedEmailVec, (String, Features)>,
-    pub email_bodies: Vec<String>,
+    pub features_map: HashMap<CompressedEmailVec, (Vec<u8>, Features)>,
+    pub email_bodies: Vec<u8>,
 }
 type CompressedEmailVec = Vec<u8>;
 
@@ -237,7 +237,8 @@ impl EmailDataset {
     pub fn new() -> EmailDataset {
         EmailDataset {
             features_map: HashMap::new(),
-            email_bodies: Vec::new(),
+            // with capacity for over the  average email size of .5kb
+            email_bodies: Vec::with_capacity(750),
         }
     }
 
@@ -250,6 +251,7 @@ impl EmailDataset {
         Ok(())
     }
 
+    //TODO: convert to u8 from string
     fn get_trimmed_email_bodies(&mut self, email_dataset_path: &Path) -> AnyhowResult<()> {
         let extension = email_dataset_path
             .extension()
@@ -332,27 +334,32 @@ pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> 
 
     // -- calculate vocab richness --
 
-    //TODO: split by ascii white spaces
+    //TODO: make more accurate, by removing ones that return empty space
 
-    let words = email.split().filter(BytesIsNotEmpty);
+    let words = email
+        .split(|b| b.is_ascii_whitespace())
+        .filter(|b: &&[u8]| !b.is_ascii() || **b == [b' '])
+        .collect::<Vec<&[u8]>>();
 
     // .split(|x| *x == b' ' || *x == b'\n');
 
-    let word_count = words.clone().count() as f64;
+    let word_count = words.len() as f64;
 
     let unique_word_count = words.into_iter().collect::<HashSet<&[u8]>>().len() as f64;
     let vocab_richness = unique_word_count / word_count;
 
     // -- sentence length variance --
-
+    let s = "  English  ";
+    assert!(Some('E') == s.trim().chars().next());
     let sentences = email
-        .split_terminator(|c: char| c == '.' || c == '!' || c == '?')
-        .filter(|s| !s.trim().is_empty())
-        .collect::<Vec<&str>>();
+        .split(|c| *c == b'.' || *c == b'!' || *c == b'?')
+        .map(|s| trim_empty_space_bytes(s))
+        .filter(|x| x.is_empty())
+        .collect::<Vec<&[u8]>>();
 
     let sentence_word_counts: Vec<f64> = sentences
         .iter()
-        .map(|x| x.split_ascii_whitespace().count() as f64)
+        .map(|x| x.split(|b| b.is_ascii_whitespace()).count() as f64)
         .collect::<Vec<f64>>();
 
     let sentence_count = sentences.len() as f64;
@@ -376,6 +383,20 @@ pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> 
     ))
 }
 
+fn trim_empty_space_bytes(input: &[u8]) -> &[u8] {
+    let start = input
+        .iter()
+        .position(|x| !x.is_ascii_whitespace())
+        .unwrap_or(0);
+
+    let end = input
+        .iter()
+        .rev()
+        .position(|x| !x.is_ascii_whitespace())
+        .unwrap_or(input.len());
+
+    return &input[start..end];
+}
 fn cmp_f64(a: &f64, b: &f64) -> Ordering {
     if a.is_nan() {
         return Ordering::Greater;
