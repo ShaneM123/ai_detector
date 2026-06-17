@@ -313,13 +313,13 @@ impl EmailDataset {
 }
 
 pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> {
-    // -- calculate compression ratio --
+    //  calculate compression ratio
 
     let input = email;
     let (compression_length, compressed_email) = compress(&input)?;
     let compression_ratio: f64 = compression_length / input.len() as f64;
 
-    // -- calculate average sentence length --
+    // calculate average sentence length
 
     //TODO: WIP
 
@@ -331,7 +331,7 @@ pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> 
         });
     let avg = sentence_accum.1 / sentence_accum.0;
 
-    // -- calculate vocab richness --
+    // calculate vocab richness
 
     //TODO: make more accurate, by removing ones that return empty space
 
@@ -347,7 +347,7 @@ pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> 
     let unique_word_count = words.into_iter().collect::<HashSet<&[u8]>>().len() as f64;
     let vocab_richness = unique_word_count / word_count;
 
-    // -- sentence length variance --
+    // sentence length variance
     let s = "  English  ";
     assert!(Some('E') == s.trim().chars().next());
     let sentences = email
@@ -390,8 +390,7 @@ fn trim_empty_space_bytes(input: &[u8]) -> &[u8] {
 
     let end = input
         .iter()
-        .rev()
-        .position(|x| !x.is_ascii_whitespace())
+        .rposition(|x| !x.is_ascii_whitespace())
         .unwrap_or(input.len());
 
     return &input[start..end];
