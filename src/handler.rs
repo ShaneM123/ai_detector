@@ -108,7 +108,7 @@ impl Handler {
                     input_dataset
                         .features_map
                         .insert(input_features.0, (email.clone(), input_features.1));
-                    input_dataset.email_bodies.extend(email);
+                    input_dataset.email_bodies.push(email);
                     info!("ANALYSING EMAIL");
 
                     let email_clone = self.email_dataset.emails.clone();

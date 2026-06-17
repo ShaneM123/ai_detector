@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
-use csv::ReaderBuilder;
+use csv::{ByteRecord, ReaderBuilder};
 use flate2::{Compress, Compression, Status};
 use image::{ImageBuffer, Rgb};
 use mail_parser::MessageParser;
@@ -31,7 +31,7 @@ impl EmailDropGuard {
 #[derive(Debug, Clone)]
 pub struct EmailDataset {
     pub features_map: HashMap<CompressedEmailVec, (Vec<u8>, Features)>,
-    pub email_bodies: Vec<u8>,
+    pub email_bodies: Vec<Vec<u8>>,
 }
 type CompressedEmailVec = Vec<u8>;
 
@@ -124,11 +124,11 @@ impl Emails {
         Err(anyhow!("couldnt analyse email"))
     }
     pub fn ncd(
-        features_one: (String, Features),
-        features_two: (String, Features),
+        features_one: (Vec<u8>, Features),
+        features_two: (Vec<u8>, Features),
     ) -> AnyhowResult<f64> {
-        let mut combined = features_two.0.as_bytes().to_vec();
-        combined.extend_from_slice(features_one.0.as_bytes());
+        let mut combined = features_two.0;
+        combined.extend_from_slice(&features_one.0);
 
         let (combined_length, _compressed_emails) = compress(&combined)?;
 
@@ -267,21 +267,20 @@ impl EmailDataset {
                 .column("body")?
                 .str()?
                 .into_iter()
-                .map(|val| val.unwrap_or_default().to_owned())
-                .collect();
+                .map(|val| val.unwrap_or_default().as_bytes().to_owned())
+                //.flatten()
+                //.copied()
+                .collect::<Vec<Vec<u8>>>();
         } else if extension == "csv" {
             self.email_bodies = ReaderBuilder::new()
                 .delimiter(b';')
                 .has_headers(false)
                 .from_path(email_dataset_path)?
-                .records()
-                .map(|val| {
-                    val.ok()
-                        .expect("expected a string record")
-                        .as_slice()
-                        .to_string()
-                })
-                .collect::<Vec<String>>();
+                .byte_records()
+                .map(|val| val.expect("expected a string record"))
+                .map(|x: ByteRecord| x.as_slice().to_owned())
+                //.flatten()
+                .collect::<Vec<Vec<u8>>>();
         } else {
             return Err(anyhow!(
                 "expected parquet or csv file, found {:?}",
@@ -291,17 +290,17 @@ impl EmailDataset {
         Ok(())
     }
 
-    fn _tidy_email_bodies(&mut self) -> AnyhowResult<()> {
-        for input in self.email_bodies.iter_mut() {
-            let message = MessageParser::default().parse(&input).unwrap();
-            *input = message
-                .body_text(0)
-                .ok_or(anyhow!("error getting body text from message"))?
-                .to_string();
-        }
+    // fn _tidy_email_bodies(&mut self) -> AnyhowResult<()> {
+    //     for input in self.email_bodies.iter_mut() {
+    //         let message = MessageParser::default().parse(&input).unwrap();
+    //         *input = message
+    //             .body_text(0)
+    //             .ok_or(anyhow!("error getting body text from message"))?
+    //             .to_string();
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     pub fn calculate_dataset_features(&mut self) -> AnyhowResult<()> {
         for email in &self.email_bodies {
