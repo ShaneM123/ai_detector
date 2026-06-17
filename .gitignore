@@ -3,3 +3,6 @@
 .~lock.ai_emails.csv#
 chart.png
 *.env
+*.pem
+*.crt
+*.key
