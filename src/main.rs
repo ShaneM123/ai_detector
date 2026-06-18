@@ -46,7 +46,9 @@ impl Config {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv::from_filename("local.env")?;
+    println!("launching...");
+    dotenv::from_filename("./local.env")?;
+    println!("getting certs");
     let server_cert = env::var("SERVER_CERT")?;
     let server_key = env::var("SERVER_KEY")?;
     let origin = env::var("ORIGIN")?;
@@ -58,10 +60,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut real_enron_emails = EmailDataset::new();
         let mut ai_enron_emails: EmailDataset = EmailDataset::new();
         real_enron_emails
-            .generate_features(Path::new("enron_data/train0.parquet"))
+            .generate_features(Path::new("/enron_data/train0.parquet"))
             .unwrap();
         ai_enron_emails
-            .generate_features(Path::new("ai_emails.csv"))
+            .generate_features(Path::new("/ai_emails/ai_emails.csv"))
             .unwrap();
         Emails::new(real_enron_emails, ai_enron_emails).unwrap()
     })
@@ -70,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("emails obtained");
 
     let server_config = Config::new(
-        "127.0.0.1:8080".to_string(),
+        "0.0.0.0:8086".to_string(),
         server_cert,
         server_key,
         emails,

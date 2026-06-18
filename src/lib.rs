@@ -250,7 +250,6 @@ impl EmailDataset {
         Ok(())
     }
 
-    //TODO: convert to u8 from string
     fn get_trimmed_email_bodies(&mut self, email_dataset_path: &Path) -> AnyhowResult<()> {
         let extension = email_dataset_path
             .extension()
@@ -260,7 +259,8 @@ impl EmailDataset {
                 PlPath::Local(Arc::from(email_dataset_path)),
                 ScanArgsParquet::default(),
             )?;
-            let dataframe = lazy_frame.select([col("body")]).limit(270).collect()?;
+            let dataframe: polars::prelude::DataFrame =
+                lazy_frame.select([col("body")]).limit(270).collect()?;
 
             self.email_bodies = dataframe
                 .column("body")?
@@ -320,8 +320,6 @@ pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> 
 
     // calculate average sentence length
 
-    //TODO: WIP
-
     let sentence_accum = email
         .split(|x| *x == b'.' || *x == b'!' || *x == b'?' || *x == b'\n')
         .filter(|x| x.trim_ascii().is_empty())
@@ -332,23 +330,16 @@ pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> 
 
     // calculate vocab richness
 
-    //TODO: make more accurate by including non-ascii
-    println!("EMAIL: {:?}", String::from_utf8_lossy(&email));
-    //println!("EMAIL: {:?}", email.make_ascii_lowercase());
-
     let words: Vec<&[u8]> = email
         .split(|b| b.is_ascii_whitespace())
         .filter(|b: &&[u8]| b.is_ascii() || !b.is_empty())
         .collect::<Vec<&[u8]>>();
 
     let word_count = words.len() as f64;
-    println!("calculated word_count: {}", word_count);
 
     let unique_word_count = words.into_iter().collect::<HashSet<&[u8]>>().len() as f64;
-    println!("calculated unique_word_count: {}", unique_word_count);
 
     let vocab_richness = unique_word_count / word_count;
-    println!("calculated vocab richness: {}", vocab_richness);
 
     // sentence length variance
 

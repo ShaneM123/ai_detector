@@ -7,3 +7,5 @@ chart.png
 *.crt
 *.key
 .vscode
+todo.txt
+/certs

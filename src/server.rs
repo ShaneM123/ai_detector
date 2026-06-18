@@ -168,6 +168,7 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, mut shutdown_complete_rx_) = mpsc::channel(1);
 
+    println!("getting certs");
     let certs =
         CertificateDer::pem_file_iter(server_config.server_cert)?.collect::<Result<Vec<_>, _>>()?;
     let key = PrivateKeyDer::from_pem_file(server_config.server_key)?;
@@ -179,6 +180,7 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
     .with_no_client_auth()
     .with_single_cert(certs, key)?;
     config.alpn_protocols = vec![b"h2".to_vec()];
+    println!("setting headers");
 
     let mut headers = HeaderMap::new();
 
@@ -203,7 +205,7 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
 
     let listener = TcpListener::bind(server_config.server_address).await?;
 
-    let acceptor = TlsAcceptor::from(Arc::new(config));
+    let acceptor: TlsAcceptor = TlsAcceptor::from(Arc::new(config));
 
     let ip_limiter: Arc<RateLimiter<IpAddr, DashMapStateStore<IpAddr>, QuantaClock>> =
         Arc::new(RateLimiter::dashmap(

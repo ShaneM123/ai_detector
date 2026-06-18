@@ -1,0 +1,20 @@
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_detector
+    ports:
+      - "8086:8086"
+    env_file:
+      - local.env
+    volumes:
+      - ./local.env:/local.env:ro
+      - ./certs:/certs:ro        # Mount your certificates (read-only)
+      - ./enron_data:/enron_data:ro        # Mount your certificates (read-only)
+      - ./ai_emails:/ai_emails:ro        # Mount your certificates (read-only)
+
+    restart: unless-stopped
+    environment:
+       - RUST_LOG=debug
