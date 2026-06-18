@@ -6,3 +6,4 @@ chart.png
 *.pem
 *.crt
 *.key
+.vscode

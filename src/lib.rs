@@ -9,8 +9,7 @@ use std::{
 use anyhow::{Ok, Result as AnyhowResult, anyhow};
 use csv::{ByteRecord, ReaderBuilder};
 use flate2::{Compress, Compression, Status};
-use image::{ImageBuffer, Rgb};
-use mail_parser::MessageParser;
+use image::{EncodableLayout, ImageBuffer, Rgb};
 use plotters::prelude::*;
 use polars::prelude::{LazyFrame, PlPath, ScanArgsParquet, col};
 use tracing::info;
@@ -333,23 +332,26 @@ pub fn calculate_features(email: &Vec<u8>) -> AnyhowResult<(Vec<u8>, Features)> 
 
     // calculate vocab richness
 
-    //TODO: make more accurate, by removing ones that return empty space
+    //TODO: make more accurate by including non-ascii
+    println!("EMAIL: {:?}", String::from_utf8_lossy(&email));
+    //println!("EMAIL: {:?}", email.make_ascii_lowercase());
 
-    let words = email
+    let words: Vec<&[u8]> = email
         .split(|b| b.is_ascii_whitespace())
-        .filter(|b: &&[u8]| !b.is_ascii() || **b == [b' '])
+        .filter(|b: &&[u8]| b.is_ascii() || !b.is_empty())
         .collect::<Vec<&[u8]>>();
 
-    // .split(|x| *x == b' ' || *x == b'\n');
-
     let word_count = words.len() as f64;
+    println!("calculated word_count: {}", word_count);
 
     let unique_word_count = words.into_iter().collect::<HashSet<&[u8]>>().len() as f64;
+    println!("calculated unique_word_count: {}", unique_word_count);
+
     let vocab_richness = unique_word_count / word_count;
+    println!("calculated vocab richness: {}", vocab_richness);
 
     // sentence length variance
-    let s = "  English  ";
-    assert!(Some('E') == s.trim().chars().next());
+
     let sentences = email
         .split(|c| *c == b'.' || *c == b'!' || *c == b'?')
         .map(|s| trim_empty_space_bytes(s))

@@ -103,7 +103,6 @@ impl Handler {
             let _ = match html_response.body.expect("empty response body") {
                 ResponseBodyType::Email(email) => {
                     let mut input_dataset = EmailDataset::new();
-                    //TODO: convert email to Vec<u8> because we never need it not to be really.
                     let input_features = calculate_features(&email)?;
                     input_dataset
                         .features_map
@@ -261,13 +260,21 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     )),
                 });
             }
-            info!("email_gathered {}", email_gathered.len());
-            // let email = form_urlencoded::parse(&email_gathered)
-            //     .into_iter()
-            //     .map(|x| x.1)
-            //     .collect::<String>();
+
+            let decoded_email = match form_urlencoded::parse(&email_gathered).next() {
+                Some(email) => email.1.as_bytes().to_vec(),
+                None => {
+                    return Ok(ResponseHandle {
+                        status: StatusCode::NO_CONTENT,
+                        body: Some(ResponseBodyType::Html(
+                            "<Html><div><p>status 204</p></div></Html>".to_string(),
+                        )),
+                    });
+                }
+            };
+
             return Ok(ResponseHandle {
-                body: Some(ResponseBodyType::Email(email_gathered)),
+                body: Some(ResponseBodyType::Email(decoded_email)),
                 status: StatusCode::OK,
             });
         }

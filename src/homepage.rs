@@ -8,8 +8,8 @@ pub fn homepage() -> AnyhowResult<String> {
         <div>
             <form action="/submit" method="post" class="form-example">
       <div class="form-example">
-        <label for="name">"Enter email to check for ai:" </label>
-        <input type="text" name="name" id="name" required />
+        <label for="email">"Enter email to check for ai:" </label>
+        <input type="text" name="email" id="email" required />
       </div>
       <div class="form-example">
         <input type="submit" value="submit!" />
