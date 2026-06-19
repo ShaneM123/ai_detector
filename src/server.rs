@@ -120,8 +120,8 @@ impl Listener {
                         .ip_limiter
                         .until_key_n_ready_with_jitter(
                             &addr.ip(),
-                            NonZeroU32::new(9).unwrap(),
-                            Jitter::up_to(Duration::from_secs(30)),
+                            NonZeroU32::new(20).unwrap(),
+                            Jitter::up_to(Duration::from_secs(15)),
                         )
                         .await
                     {

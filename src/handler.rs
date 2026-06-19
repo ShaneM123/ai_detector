@@ -50,7 +50,7 @@ impl Handler {
     pub async fn run(&mut self) -> AnyhowResult<()> {
         info!("apply ratelimiting");
         let limiter = governor::RateLimiter::direct(
-            Quota::per_second(NonZero::new(15).unwrap()).allow_burst(NonZero::new(10).unwrap()),
+            Quota::per_second(NonZero::new(25).unwrap()).allow_burst(NonZero::new(10).unwrap()),
         );
         info!("run handler");
         while !self.shutdown.is_shutdown() {
@@ -71,6 +71,7 @@ impl Handler {
                 Some(request) => request?,
                 None => return Ok(()),
             };
+            info!("accepted request, building response");
 
             let response_builder = Response::builder()
                 .header("Access-Control-Allow-Origin", &self.origin)

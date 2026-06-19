@@ -9,3 +9,6 @@ chart.png
 .vscode
 todo.txt
 /certs
+*.tar
+docker-compose.prod.yaml
+Caddyfile
