@@ -51,12 +51,12 @@ impl Handler {
     pub async fn run(&mut self) -> AnyhowResult<()> {
         info!("apply ratelimiting");
         let limiter = governor::RateLimiter::direct(
-            Quota::per_second(NonZero::new(8).unwrap()).allow_burst(NonZero::new(10).unwrap()),
+            Quota::per_second(NonZero::new(40).unwrap()).allow_burst(NonZero::new(25).unwrap()),
         );
         info!("run handler");
         while !self.shutdown.is_shutdown() {
             limiter
-                .until_ready_with_jitter(Jitter::up_to(Duration::from_millis(3_569)))
+                .until_ready_with_jitter(Jitter::up_to(Duration::from_millis(2_569)))
                 .await;
             let maybe_request = tokio::select! {
 

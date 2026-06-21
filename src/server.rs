@@ -121,7 +121,7 @@ impl Listener {
                         .until_key_n_ready_with_jitter(
                             &addr.ip(),
                             NonZeroU32::new(2).unwrap(),
-                            Jitter::up_to(Duration::from_secs(5)),
+                            Jitter::up_to(Duration::from_secs(2)),
                         )
                         .await
                     {
@@ -162,7 +162,7 @@ impl Listener {
     }
 }
 
-const MAX_CONNECTIONS: usize = 600;
+const MAX_CONNECTIONS: usize = 1000;
 
 pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<()> {
     let (notify_shutdown, _) = broadcast::channel(1);
@@ -209,8 +209,8 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
 
     let ip_limiter: Arc<RateLimiter<IpAddr, DashMapStateStore<IpAddr>, QuantaClock>> =
         Arc::new(RateLimiter::dashmap(
-            Quota::per_second(NonZeroU32::new(35).unwrap())
-                .allow_burst(NonZeroU32::new(20).unwrap()),
+            Quota::per_second(NonZeroU32::new(50).unwrap())
+                .allow_burst(NonZeroU32::new(35).unwrap()),
         ));
 
     let mut server: Listener = Listener {
