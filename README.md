@@ -102,7 +102,7 @@
 
 This guide assumes you are using Linux and have Rust installed.
 
-### Prerequiste
+### Prerequisite
 
 This guide assumes you are using Linux and have `git`, `Rust` and `openssl` installed or are capable of installing them
 
