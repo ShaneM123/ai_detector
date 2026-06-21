@@ -12,3 +12,4 @@ todo.txt
 *.tar
 docker-compose.prod.yaml
 Caddyfile
+ai_detector_v0.1.0

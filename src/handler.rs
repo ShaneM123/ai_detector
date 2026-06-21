@@ -1,4 +1,5 @@
 use std::num::NonZero;
+use std::result;
 use std::time::Duration;
 
 use crate::homepage::homepage;
@@ -50,7 +51,7 @@ impl Handler {
     pub async fn run(&mut self) -> AnyhowResult<()> {
         info!("apply ratelimiting");
         let limiter = governor::RateLimiter::direct(
-            Quota::per_second(NonZero::new(25).unwrap()).allow_burst(NonZero::new(10).unwrap()),
+            Quota::per_second(NonZero::new(8).unwrap()).allow_burst(NonZero::new(10).unwrap()),
         );
         info!("run handler");
         while !self.shutdown.is_shutdown() {
@@ -71,6 +72,7 @@ impl Handler {
                 Some(request) => request?,
                 None => return Ok(()),
             };
+
             info!("accepted request, building response");
 
             let response_builder = Response::builder()
@@ -99,7 +101,9 @@ impl Handler {
                 }
             }
 
+            info!("process request ");
             let html_response = process_request(request).await?;
+            info!("match request response ");
 
             let _ = match html_response.body.expect("empty response body") {
                 ResponseBodyType::Email(email) => {
@@ -190,6 +194,23 @@ impl Handler {
             return Err(anyhow!("Origin header read fail"));
         }
 
+        if let Some(user_agent) = request.headers().get("USER_AGENT") {
+            let agent_str = match user_agent.to_str() {
+                result::Result::Ok(val) => val,
+                Err(val) => return Err(anyhow!(format!("USER_AGENT header read fail: {}", val))),
+            };
+            let unwanted_user_agents = [
+                "bot", "crawler", "spider", "scrape", "sqlmap", "nikto", "masscan", "zgrab",
+                "nmap", "dirb", "gobuster", "ffuf", "nuclei",
+            ];
+            if unwanted_user_agents
+                .iter()
+                .any(|pattern| agent_str.contains(pattern))
+            {
+                return Err(anyhow!("USER_AGENT header read fail"));
+            }
+        }
+
         return Ok(());
     }
 }
@@ -218,7 +239,8 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                 body: Some(ResponseBodyType::Html(hompage_html)),
             });
         } else if request.uri().path().contains("favicon.ico") {
-            let favicon = tokio::fs::read("cuddlyferris.png").await?;
+            info!("recieving favicon request");
+            let favicon = tokio::fs::read("./cuddlyferris.png").await?;
             return Ok(ResponseHandle {
                 status: StatusCode::OK,
                 body: Some(ResponseBodyType::Image(favicon)),
@@ -233,6 +255,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
         }
     } else if Method::POST == *request.method() {
         if request.uri().path() == "/submit" {
+            info!("recieving submit request");
             let mut email_gathered = Vec::new();
             while let Some(chunk) = request.body_mut().data().await {
                 let chunk = chunk?;

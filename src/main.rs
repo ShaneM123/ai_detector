@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing_subscriber::fmt::try_init();
 
     let emails = tokio::task::spawn_blocking(|| {
-        let mut real_enron_emails = EmailDataset::new();
+        let mut real_enron_emails: EmailDataset = EmailDataset::new();
         let mut ai_enron_emails: EmailDataset = EmailDataset::new();
         real_enron_emails
             .generate_features(Path::new("/enron_data/train0.parquet"))

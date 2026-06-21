@@ -1,7 +1,7 @@
 
 services:
   app:
-    image: ai_detector_x86_v0.1.0
+    image: ai_detector_v0.1.0
     container_name: ai_detector
     ports:
       - "8086:8086"

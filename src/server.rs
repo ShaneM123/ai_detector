@@ -70,7 +70,7 @@ impl Listener {
 
                 info!("obtained socket for address {}", addr);
                 let stream = match Builder::new()
-                    .max_concurrent_streams(150)
+                    .max_concurrent_streams(500)
                     .initial_connection_window_size(1_000_000)
                     .handshake(socket)
                     .await
@@ -120,8 +120,8 @@ impl Listener {
                         .ip_limiter
                         .until_key_n_ready_with_jitter(
                             &addr.ip(),
-                            NonZeroU32::new(20).unwrap(),
-                            Jitter::up_to(Duration::from_secs(15)),
+                            NonZeroU32::new(2).unwrap(),
+                            Jitter::up_to(Duration::from_secs(5)),
                         )
                         .await
                     {
@@ -209,7 +209,7 @@ pub async fn run(server_config: Config, shutdown: impl Future) -> AnyhowResult<(
 
     let ip_limiter: Arc<RateLimiter<IpAddr, DashMapStateStore<IpAddr>, QuantaClock>> =
         Arc::new(RateLimiter::dashmap(
-            Quota::per_second(NonZeroU32::new(30).unwrap())
+            Quota::per_second(NonZeroU32::new(35).unwrap())
                 .allow_burst(NonZeroU32::new(20).unwrap()),
         ));
 
