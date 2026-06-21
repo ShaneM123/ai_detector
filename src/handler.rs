@@ -14,9 +14,10 @@ use h2::RecvStream;
 use h2::server::{self, Connection};
 use http::{HeaderMap, Method, Request};
 use http::{Response, StatusCode};
+use tokio::time::timeout;
 use tokio::{net::TcpStream, sync::mpsc};
 use tokio_rustls::server::TlsStream;
-use tracing::info;
+use tracing::{error, info};
 
 //TODO: email input validation via Type Email(String) and deserialse/parse with validation built in basically
 pub struct Handler {
@@ -72,11 +73,29 @@ impl Handler {
                 Some(request) => request?,
                 None => return Ok(()),
             };
+            let email_dataset = self.email_dataset.clone();
+            let origin = self.origin.clone();
 
-            info!("accepted request, building response");
+            tokio::spawn(async move {
+                if let Err(e) = Self::handle_request(request, respond, email_dataset, origin).await
+                {
+                    error!(cause = ?e, "stream error");
+                }
+            });
+        }
+        Ok(())
+    }
 
-            let response_builder = Response::builder()
-                .header("Access-Control-Allow-Origin", &self.origin)
+    async fn handle_request(
+        mut request: Request<RecvStream>,
+        mut respond: server::SendResponse<Bytes>,
+        email_dataset: EmailDropGuard,
+        origin: String,
+    ) -> AnyhowResult<()> {
+        info!("accepted request, building response");
+
+        let response_builder = Response::builder()
+                .header("Access-Control-Allow-Origin", &origin)
                 .header(
                     "Strict-Transport-Security",
                     "max-age=63072000; includeSubDomains; preload",
@@ -91,82 +110,81 @@ impl Handler {
                 )
                 .header("Content-Language", "en");
 
-            match Self::check_request_headers(&request, &self.origin) {
-                std::result::Result::Ok(()) => {}
-                Err(e) => {
-                    let response = response_builder.status(412).body(())?;
+        match Self::check_request_headers(&request, &origin) {
+            std::result::Result::Ok(()) => {}
+            Err(e) => {
+                let response = response_builder.status(412).body(())?;
 
-                    respond.send_response(response, true)?;
-                    return Err(anyhow!("ERR reading headers: {}", e));
-                }
+                respond.send_response(response, true)?;
+                return Err(anyhow!("ERR reading headers: {}", e));
             }
+        }
 
-            info!("process request ");
-            let html_response = process_request(request).await?;
-            info!("match request response ");
+        info!("process request ");
+        let html_response = process_request(request).await?;
+        info!("match request response ");
 
-            let _ = match html_response.body.expect("empty response body") {
-                ResponseBodyType::Email(email) => {
-                    let mut input_dataset = EmailDataset::new();
-                    let input_features = calculate_features(&email)?;
-                    input_dataset
-                        .features_map
-                        .insert(input_features.0, (email.clone(), input_features.1));
-                    input_dataset.email_bodies.push(email);
-                    info!("ANALYSING EMAIL");
+        let _ = match html_response.body.expect("empty response body") {
+            ResponseBodyType::Email(email) => {
+                let mut input_dataset = EmailDataset::new();
+                let input_features = calculate_features(&email)?;
+                input_dataset
+                    .features_map
+                    .insert(input_features.0, (email.clone(), input_features.1));
+                input_dataset.email_bodies.push(email);
+                info!("ANALYSING EMAIL");
 
-                    let email_clone = self.email_dataset.emails.clone();
+                let email_clone = email_dataset.emails.clone();
 
-                    let res = tokio::task::spawn_blocking(move || {
-                        let guard = email_clone;
-                        guard.analyse(input_dataset)
-                    })
-                    .await??;
-                    let hompage_html = homepage()?;
-                    let mut body = Bytes::new();
-                    if res.0 {
-                        body = Bytes::from(format!("{} <p>It's a real email</p>", hompage_html));
-                    } else {
-                        body = Bytes::from(format!("{} <p>It's an AI email</p>", hompage_html));
-                    }
+                let res = tokio::task::spawn_blocking(move || {
+                    let guard = email_clone;
+                    guard.analyse(input_dataset)
+                })
+                .await??;
+                let hompage_html = homepage()?;
+                let mut body = Bytes::new();
+                if res.0 {
+                    body = Bytes::from(format!("{} <p>It's a real email</p>", hompage_html));
+                } else {
+                    body = Bytes::from(format!("{} <p>It's an AI email</p>", hompage_html));
+                }
 
-                    let response = response_builder
-                        .header("Content-Type", "text/html")
-                        .status(html_response.status)
-                        .body(())?;
-                    let mut send_stream = respond.send_response(response, false)?;
-                    send_stream.send_data(body, false)?;
-                    let encoded = general_purpose::STANDARD.encode(res.1);
+                let response = response_builder
+                    .header("Content-Type", "text/html")
+                    .status(html_response.status)
+                    .body(())?;
+                let mut send_stream = respond.send_response(response, false)?;
+                send_stream.send_data(body, false)?;
+                let encoded = general_purpose::STANDARD.encode(res.1);
 
-                    send_stream.send_data(
+                send_stream.send_data(
                         Bytes::from(format!(
                             "<img src=\"data:image/png;base64,{}\" style=\"max-width: 80%; height: 80%; display: block;\" alt=\"Embedded Image\">",
                             encoded
                         )),
                         true,
                     )?;
-                }
+            }
 
-                ResponseBodyType::Html(html) => {
-                    let response = response_builder
-                        .header("Content-Type", "text/html")
-                        .status(html_response.status)
-                        .body(())?;
-                    let mut send_stream = respond.send_response(response, false)?;
-                    send_stream.send_data(Bytes::from(html), true)?;
-                }
+            ResponseBodyType::Html(html) => {
+                let response = response_builder
+                    .header("Content-Type", "text/html")
+                    .status(html_response.status)
+                    .body(())?;
+                let mut send_stream = respond.send_response(response, false)?;
+                send_stream.send_data(Bytes::from(html), true)?;
+            }
 
-                ResponseBodyType::Image(image) => {
-                    let response = response_builder
-                        .header("Content-Type", "image/png")
-                        .status(html_response.status)
-                        .body(())?;
-                    let mut send_stream = respond.send_response(response, false)?;
+            ResponseBodyType::Image(image) => {
+                let response = response_builder
+                    .header("Content-Type", "image/png")
+                    .status(html_response.status)
+                    .body(())?;
+                let mut send_stream = respond.send_response(response, false)?;
 
-                    send_stream.send_data(Bytes::from(image), true)?;
-                }
-            };
-        }
+                send_stream.send_data(Bytes::from(image), true)?;
+            }
+        };
         Ok(())
     }
 
@@ -240,7 +258,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             });
         } else if request.uri().path().contains("favicon.ico") {
             info!("recieving favicon request");
-            let favicon = tokio::fs::read("./cuddlyferris.png").await?;
+            let favicon = tokio::fs::read("./ai_detector_logo.png").await?;
             return Ok(ResponseHandle {
                 status: StatusCode::OK,
                 body: Some(ResponseBodyType::Image(favicon)),
@@ -257,14 +275,23 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
         if request.uri().path() == "/submit" {
             info!("recieving submit request");
             let mut email_gathered = Vec::new();
+
+            info!(
+                "capacity available: {}",
+                request.body_mut().flow_control().available_capacity()
+            );
+
             while let Some(chunk) = request.body_mut().data().await {
                 let chunk = chunk?;
+                info!("recieving chunk for submit");
 
                 email_gathered.extend_from_slice(&chunk);
                 let _ = request
                     .body_mut()
                     .flow_control()
                     .release_capacity(chunk.len())?;
+                info!("released capacity");
+
                 if email_gathered.len() > 4000 {
                     return Ok(ResponseHandle {
                         status: StatusCode::OK,
@@ -275,6 +302,8 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     });
                 }
             }
+            info!("checking email length");
+
             if email_gathered.len() < 16 {
                 return Ok(ResponseHandle {
                     status: StatusCode::OK,
@@ -284,6 +313,7 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     )),
                 });
             }
+            info!("decoding email");
 
             let decoded_email = match form_urlencoded::parse(&email_gathered).next() {
                 Some(email) => email.1.as_bytes().to_vec(),

@@ -9,15 +9,6 @@ mod homepage;
 mod server;
 mod shutdown;
 
-// TODO:
-// some kind of benchmark
-// implement LZJD later
-// allow users to set datasets
-// allow users to set k value
-// allow user to set features
-
-//TODO: use channels to stream data back and use http2 server push to eventually give it to the frontend
-
 #[derive(Debug, Clone)]
 struct Config {
     server_address: String,

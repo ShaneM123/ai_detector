@@ -70,8 +70,9 @@ impl Listener {
 
                 info!("obtained socket for address {}", addr);
                 let stream = match Builder::new()
-                    .max_concurrent_streams(500)
-                    .initial_connection_window_size(1_000_000)
+                    .max_concurrent_streams(256)
+                    .initial_connection_window_size(2_000_000)
+                    .initial_window_size(1_000_000)
                     .handshake(socket)
                     .await
                 {

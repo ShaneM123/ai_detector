@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN useradd -r -s /bin/false appuser
 COPY --from=builder /app/target/release/ai_detector /app/ai_detector
+COPY ai_detector_logo.png /app/ai_detector_logo.png
 USER appuser
 EXPOSE 8086
 ENTRYPOINT ["/app/ai_detector"]

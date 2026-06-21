@@ -3,6 +3,9 @@ services:
   app:
     image: ai_detector_v0.1.0
     container_name: ai_detector
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "8086:8086"
     env_file:
