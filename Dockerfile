@@ -36,5 +36,5 @@ RUN useradd -r -s /bin/false appuser
 COPY --from=builder /app/target/release/ai_detector /app/ai_detector
 COPY ai_detector_logo.png /app/ai_detector_logo.png
 USER appuser
-EXPOSE 8086
+EXPOSE 8080
 ENTRYPOINT ["/app/ai_detector"]

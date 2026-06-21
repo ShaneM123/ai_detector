@@ -7,7 +7,7 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "8086:8086"
+      - "8080:8080"
     env_file:
       - local.env
     volumes:

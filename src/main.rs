@@ -43,32 +43,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_cert = env::var("SERVER_CERT")?;
     let server_key = env::var("SERVER_KEY")?;
     let origin = env::var("ORIGIN")?;
+    let real_emails = env::var("REAL_EMAILS")?;
+    let ai_emails = env::var("AI_EMAILS")?;
+    let server_address = env::var("SERVER_ADDRESS")?;
 
     let _trace: Result<(), Box<dyn std::error::Error + Send + Sync>> =
         tracing_subscriber::fmt::try_init();
 
-    let emails = tokio::task::spawn_blocking(|| {
-        let mut real_enron_emails: EmailDataset = EmailDataset::new();
-        let mut ai_enron_emails: EmailDataset = EmailDataset::new();
-        real_enron_emails
-            .generate_features(Path::new("/enron_data/train0.parquet"))
+    let emails = tokio::task::spawn_blocking(move || {
+        let mut real_human_emails: EmailDataset = EmailDataset::new();
+        let mut ai_faux_emails: EmailDataset = EmailDataset::new();
+        real_human_emails
+            .generate_features(Path::new(&real_emails))
             .unwrap();
-        ai_enron_emails
-            .generate_features(Path::new("/ai_emails/ai_emails.csv"))
+        ai_faux_emails
+            .generate_features(Path::new(&ai_emails))
             .unwrap();
-        Emails::new(real_enron_emails, ai_enron_emails).unwrap()
+        Emails::new(real_human_emails, ai_faux_emails).unwrap()
     })
     .await
     .unwrap();
     println!("emails obtained");
 
-    let server_config = Config::new(
-        "0.0.0.0:8086".to_string(),
-        server_cert,
-        server_key,
-        emails,
-        origin,
-    );
+    let server_config = Config::new(server_address, server_cert, server_key, emails, origin);
     info!("starting server");
 
     server::run(server_config, signal::ctrl_c()).await?;

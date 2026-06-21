@@ -82,7 +82,8 @@
 
 [![AI Detector Screen Shot][product-screenshot]](https://detectai.dev)
 
-Here's a blank template to get started. To avoid retyping too much info, do a search and replace with your text editor for the following: `github_username`, `repo_name`, `twitter_handle`, `linkedin_username`, `email_client`, `email`, `project_title`, `project_description`, `project_license`
+#### A knn algorithim based solution to help identify and classify AI written emails or text 
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -101,21 +102,26 @@ Here's a blank template to get started. To avoid retyping too much info, do a se
 
 This guide assumes you are using Linux and have Rust installed.
 
-### Localhost Example
+### Prerequiste
+
+This guide assumes you are using Linux and have `git`, `Rust` and `openssl` installed or are capable of installing them
+
+### How to Run Locally
 
 1. Clone the repo
    ```sh
    git clone https://github.com/ShaneM123/ai_detector.git
    ```
-2. create keys using openssh
+2. you will need the enron_email dataset (or similar). currently it can be found here: `https://huggingface.co/datasets/corbt/enron-emails/tree/main`
+3. create keys using openssh
    ```sh
-   npm install
+   openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout test_server.key -out test_server.crt
    ```
 4. run the app locally
    ```sh
    cargo run
    ```
-5. open your browser and go to `localhost:8086`
+5. open your browser and go to `localhost:8080`
 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

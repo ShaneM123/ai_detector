@@ -1,5 +1,4 @@
 /target
-/enron_data
 .~lock.ai_emails.csv#
 chart.png
 *.env
@@ -13,3 +12,5 @@ todo.txt
 docker-compose.prod.yaml
 Caddyfile
 ai_detector_v0.1.0
+!local.env
+/enron_data
