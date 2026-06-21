@@ -1,0 +1,222 @@
+<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
+<a id="readme-top"></a>
+<!--
+*** Thanks for checking out the Best-README-Template. If you have a suggestion
+*** that would make this better, please fork the repo and create a pull request
+*** or simply open an issue with the tag "enhancement".
+*** Don't forget to give the project a star!
+*** Thanks again! Now go create something AMAZING! :D
+-->
+
+
+
+<!-- PROJECT SHIELDS -->
+<!--
+*** I'm using markdown "reference style" links for readability.
+*** Reference links are enclosed in brackets [ ] instead of parentheses ( ).
+*** See the bottom of this document for the declaration of the reference variables
+*** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
+*** https://www.markdownguide.org/basic-syntax/#reference-style-links
+-->
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![project_license][license-shield]][license-url]
+[![LinkedIn][linkedin-shield]][linkedin-url]
+
+
+
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <a href="https://github.com/ShaneM123/ai_detector">
+    <img src="https://raw.githubusercontent.com/ShaneM123/ai_detector/refs/heads/main/ai_detector_logo.png" alt="Logo" width="80" height="80">
+  </a>
+
+<h3 align="center">AI Detector</h3>
+
+  <p align="center">
+     A knn algorithim based solution to help identify and classify AI written emails or text 
+    <br />
+    <a href="https://detectai.dev/">View Demo</a>
+    &middot;
+    <a href="https://github.com/ShaneM123/ai_detector/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
+    &middot;
+    <a href="https://github.com/ShaneM123/ai_detector/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
+  </p>
+</div>
+
+
+
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About The Project</a>
+      <ul>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+      </ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#license">License</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
+</details>
+
+
+
+<!-- ABOUT THE PROJECT -->
+## About The Project
+
+[![AI Detector Screen Shot][product-screenshot]](https://detectai.dev)
+
+Here's a blank template to get started. To avoid retyping too much info, do a search and replace with your text editor for the following: `github_username`, `repo_name`, `twitter_handle`, `linkedin_username`, `email_client`, `email`, `project_title`, `project_description`, `project_license`
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+### Built With
+
+* [![Rust][Rust]][Rust-url]
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- GETTING STARTED -->
+## Getting Started
+
+This guide assumes you are using Linux and have Rust installed.
+
+### Localhost Example
+
+1. Clone the repo
+   ```sh
+   git clone https://github.com/ShaneM123/ai_detector.git
+   ```
+2. create keys using openssh
+   ```sh
+   npm install
+   ```
+4. run the app locally
+   ```sh
+   cargo run
+   ```
+5. open your browser and go to `localhost:8086`
+
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- USAGE EXAMPLES -->
+## Usage
+
+This app uses knn and 2 data sets. simply copy and paste an email into the input and submit.
+The analysis will show where your email is in relation to the emails in the dataset. With the correct K value and datasets, KNN is quite accurate at identifying which group the input data belongs to. 
+
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- ROADMAP -->
+## Roadmap
+
+- [ ] Add Styling to Frontend
+- [ ] Allow users to set k value
+- [ ] Allow users to adjust datasets
+- [ ] Implement Lempel-Ziv Jaccard Distance
+
+See the [open issues](https://github.com/ShaneM123/ai_detector/issues) for a full list of proposed features (and known issues).
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- CONTRIBUTING -->
+## Contributing
+
+Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+
+If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
+Don't forget to give the project a star! Thanks again!
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### Top contributors:
+
+<a href="https://github.com/ShaneM123/ai_detector/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ShaneM123/ai_detector" alt="contrib.rocks image" />
+</a>
+
+
+
+<!-- LICENSE -->
+## License
+
+Distributed under the project_license. See `LICENSE.txt` for more information.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- CONTACT -->
+## Contact
+
+Shane Moloney - aidetector.eagle209@passmail.net
+
+Project Link: [https://github.com/ShaneM123/ai_detector](https://github.com/ShaneM123/ai_detector)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- ACKNOWLEDGMENTS -->
+## Acknowledgments
+
+* [Best README Template](https://github.com/othneildrew/Best-README-Template)
+
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+[contributors-shield]: https://img.shields.io/github/contributors/ShaneM123/ai_detector.svg?style=for-the-badge
+[contributors-url]: https://github.com/ShaneM123/ai_detector/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/ShaneM123/ai_detector.svg?style=for-the-badge
+[forks-url]: https://github.com/ShaneM123/ai_detector/forks
+[stars-shield]: https://img.shields.io/github/stars/ShaneM123/ai_detector.svg?style=for-the-badge
+[stars-url]: https://github.com/ShaneM123/ai_detector/stargazers
+[issues-shield]: https://img.shields.io/github/issues/ShaneM123/ai_detector.svg?style=for-the-badge
+[issues-url]: https://github.com/ShaneM123/ai_detector/issues
+[license-shield]: https://img.shields.io/github/license/ShaneM123/ai_detector.svg?style=for-the-badge
+[license-url]: https://github.com/ShaneM123/ai_detector/blob/master/LICENSE.txt
+[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
+[linkedin-url]: https://linkedin.com/in/shanemoloney123
+[product-screenshot]: https://raw.githubusercontent.com/ShaneM123/ai_detector/refs/heads/main/ai_detector_Screenshot.png
+<!-- Shields.io badges. You can a comprehensive list with many more badges at: https://github.com/inttter/md-badges -->
+[Rust]: https://img.shields.io/badge/Rust-%23000000.svg?e&logo=rust&logoColor=white
+[Rust-url]: https://rust-lang.org/
+
