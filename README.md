@@ -27,7 +27,7 @@
 <h3 align="center">AI Detector</h3>
 
   <p align="center">
-     A knn algorithim based solution to help identify and classify AI written emails or text 
+     A knn algorithm based solution to help identify and classify AI written emails or text 
     <br />
     <a href="https://detectai.dev/">View Demo</a>
     &middot;
@@ -72,7 +72,7 @@
 
 [![AI Detector Screen Shot][product-screenshot]](https://detectai.dev)
 
-#### A knn algorithim based solution to help identify and classify AI written emails or text 
+#### A knn algorithm based solution to help identify and classify AI written emails or text 
 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
