@@ -120,7 +120,6 @@ impl Handler {
             }
         }
 
-        info!("process request ");
         let html_response = process_request(request).await?;
         info!("match request response ");
 
@@ -276,21 +275,14 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
             info!("recieving submit request");
             let mut email_gathered = Vec::new();
 
-            info!(
-                "capacity available: {}",
-                request.body_mut().flow_control().available_capacity()
-            );
-
             while let Some(chunk) = request.body_mut().data().await {
                 let chunk = chunk?;
-                info!("recieving chunk for submit");
 
                 email_gathered.extend_from_slice(&chunk);
                 let _ = request
                     .body_mut()
                     .flow_control()
                     .release_capacity(chunk.len())?;
-                info!("released capacity");
 
                 if email_gathered.len() > 4000 {
                     return Ok(ResponseHandle {
@@ -302,7 +294,6 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     });
                 }
             }
-            info!("checking email length");
 
             if email_gathered.len() < 16 {
                 return Ok(ResponseHandle {
@@ -313,7 +304,6 @@ pub async fn process_request(mut request: Request<RecvStream>) -> AnyhowResult<R
                     )),
                 });
             }
-            info!("decoding email");
 
             let decoded_email = match form_urlencoded::parse(&email_gathered).next() {
                 Some(email) => email.1.as_bytes().to_vec(),
